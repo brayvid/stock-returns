@@ -16,10 +16,20 @@ symbols = [s.strip().upper() for s in symbols_input.split(",") if s.strip()]
 all_symbols = list(set(symbols + [benchmark]))
 
 # Date range selector
+# Date range selector with explicit valid bounds
 default_start = datetime.today() - timedelta(days=365 * 20)
 default_end = datetime.today()
-start_date = st.sidebar.date_input("Start date", default_start)
-end_date = st.sidebar.date_input("End date", default_end)
+
+min_valid_date = datetime(1900, 1, 1)
+max_valid_date = datetime(2100, 12, 31)
+
+start_date = st.sidebar.date_input(
+    "Start date", default_start, min_value=min_valid_date, max_value=max_valid_date
+)
+end_date = st.sidebar.date_input(
+    "End date", default_end, min_value=min_valid_date, max_value=max_valid_date
+)
+
 log_scale = st.sidebar.checkbox("Log Returns", value=False)
 
 
