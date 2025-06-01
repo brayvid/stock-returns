@@ -181,11 +181,58 @@
         }
         */
 
+        .main-page-title { /* Style for the main title */
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2.2em; /* Default size for larger screens */
+            font-weight: 600; /* Example font weight */
+        }
+
+        /* --- Responsive adjustments --- */
+        
+        /* For mobile devices (e.g., screens less than 768px wide) */
+        @media (max-width: 768px) {
+            .main-page-title {
+                font-size: 1.6em; /* Smaller font size for mobile */
+                margin-bottom: 15px; /* Adjust margin if needed */
+            }
+
+            .controls-area h2 { /* Example: also adjust controls area title */
+                font-size: 1.2em;
+            }
+
+            /* You can add other mobile-specific styles here */
+            input[type="text"], 
+            input[type="date"],
+            select {
+                padding: 8px; /* Slightly smaller padding on mobile inputs */
+                font-size: 0.9em;
+            }
+             button[type="submit"] {
+                padding: 10px 15px;
+                font-size: 0.95em;
+            }
+            .fine-tune-slider-container h3 {
+                font-size: 1em;
+            }
+        }
+
+        /* Optional: Even smaller screens */
+        @media (max-width: 480px) {
+            .main-page-title {
+                font-size: 1.4em; /* Even smaller for very small screens */
+            }
+             .controls-area h2 {
+                font-size: 1.1em;
+            }
+        }
+
     </style>
 </head>
 <body>
     <div class="page-wrapper">
-        <h1 style="text-align: center; color: #333; margin-bottom: 20px;">Compare Stock Returns</h1>
+        <h1 class="main-page-title" style="text-align: center; color: #333; margin-bottom: 20px;">Compare Stock Returns</h1>
         <form method="GET" action="/" class="content-form">
             <div class="controls-area">
                 <h2>Chart Controls</h2>
