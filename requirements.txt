@@ -1,5 +1,6 @@
-streamlit
+Flask
 yfinance
 pandas
 matplotlib
 numpy
+Flask-Caching

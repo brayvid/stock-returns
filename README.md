@@ -1,56 +1,80 @@
-# Compare Stock Returns
+# Stock Return Comparison App
 
-This is a Streamlit-based interactive app that allows users to visualize and compare the normalized cumulative returns of multiple stock tickers relative to a selected benchmark over a customizable time range. It supports both linear and logarithmic scaling, dynamic zooming, and clean percentage formatting.
+A Flask web application to download, analyze, and compare the historical returns of publicly traded stocks against a benchmark. This project is a port of an original Streamlit application.
 
 ## Features
 
-- Visualize normalized cumulative returns for selected tickers vs. a benchmark
-- Interactive slider to select the normalization date range
-- Chart start and end date selectors
-- Toggle between linear and logarithmic y-axis scales
-- Smoothed curves using a 12-day rolling average
-- Automatically sorted legend by final return
-- Clean percentage-based y-axis labels with adaptive tick spacing
-- Handles missing or unavailable data gracefully
+*   Compare multiple stock symbols (e.g., GOOGL, AAPL, MSFT).
+*   Set a benchmark symbol (e.g., SPY for S&P 500).
+*   Select an overall date range for data download.
+*   Fine-tune the plotted date range using an interactive slider.
+*   View normalized cumulative returns.
+*   Option to view returns on a logarithmic scale.
+*   Data downloaded from Yahoo Finance via the `yfinance` library.
+*   Caching of downloaded data to speed up subsequent requests.
+*   Responsive design for usability on different screen sizes.
 
-## Installation
+## Tech Stack
 
-1. Clone this repository:
+*   **Backend:** Python, Flask
+*   **Data Retrieval:** `yfinance`
+*   **Data Handling:** `pandas`, `numpy`
+*   **Plotting:** `matplotlib` (rendered to an image)
+*   **Frontend:** HTML, CSS, JavaScript
+*   **UI Components:** noUiSlider (for the date range slider)
+*   **Caching:** `Flask-Caching`
 
-   ```bash
-   git clone https://github.com/brayvid/compare-stock-returns.git
-   cd compare-stock-returns```
+## Project Structure
 
-2. Install the required packages:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-   **Example `requirements.txt`:**
-
-   ```
-   streamlit
-   yfinance
-   pandas
-   matplotlib
-   numpy
-   ```
-
-## Running the App
-
-```bash
-streamlit run app.py
+```
+flask_stock_app/
+├── app.py             # Main Flask application logic
+├── static/            # Static files (CSS, JS, images)
+│   └── favicon.ico
+├── templates/         # HTML templates
+│   └── index.html
+├── requirements.txt   # Python dependencies
+└── README.md          # This file
 ```
 
-Then open your browser to `http://localhost:8501`.
+## Setup and Installation
 
-## Notes
+1.  **Clone the repository (if applicable):**
+    ```bash
+    git clone https://github.com/brayvid/compare-stock-returns.git
+    cd compare-stock-returns
+    ```
 
-* All returns are normalized to 1.0 at the selected start date; e.g., 2.0 = +100%, 0.5 = –50%.
-* The app dynamically determines the y-axis range based on the visible date window.
-* Log scale is disabled automatically if the visible data contains non-positive values.
+2.  **Create a Python virtual environment:**
+    It's highly recommended to use a virtual environment to manage dependencies.
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
 
-## License
+3.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-This project is open-source and available under the MIT License.
+## Running the Application
+
+1.  **Ensure your virtual environment is activated.**
+2.  **Run the Flask development server:**
+    ```bash
+    flask run
+    ```
+    Alternatively, if your `app.py` has `if __name__ == '__main__': app.run(debug=True)`, you can run:
+    ```bash
+    python app.py
+    ```
+3.  **Open your web browser** and navigate to `http://127.0.0.1:5000/`.
+
+## How to Use
+
+1.  **Enter Stock Symbols:** In the "Stock Symbols" field, enter comma-separated ticker symbols (e.g., `AAPL,MSFT,GOOGL`).
+2.  **Enter Benchmark Symbol:** Provide a benchmark symbol (e.g., `SPY`).
+3.  **Select Overall Date Range:** Choose the start and end dates for the historical data you want to download.
+4.  **Logarithmic Scale (Optional):** Check the "Logarithmic Scale" box if you prefer to view returns on a log scale.
+5.  **Click "Update Plot":** This will fetch the data and generate the initial plot.
+6.  **Fine-tune Plotted Date Range:** Use the double-handled slider above the plot to zoom into specific periods within the downloaded data range. The plot will update automatically (or upon clicking "Update Plot" again, depending on implementation choices for the slider's effect).
