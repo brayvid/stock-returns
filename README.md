@@ -1,6 +1,6 @@
-# Stock Return Comparison App
+# Compare Stock Returns
 
-A Flask web application to download, analyze, and compare the historical returns of publicly traded stocks against a benchmark. This project is a port of an original Streamlit application.
+A Flask web app to download, analyze, and compare the historical returns of publicly traded stocks against a benchmark.
 
 ## Features
 
