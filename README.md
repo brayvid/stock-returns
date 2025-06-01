@@ -2,6 +2,8 @@
 
 A Flask web app to download, analyze, and compare the historical returns of publicly traded stocks against a benchmark.
 
+View the project here: **[stocks.blakerayvid.com](https://stocks.blakerayvid.com)**
+
 ## Features
 
 *   Compare multiple stock symbols (e.g., GOOGL, AAPL, MSFT).
@@ -78,3 +80,9 @@ flask_stock_app/
 4.  **Logarithmic Scale (Optional):** Check the "Logarithmic Scale" box if you prefer to view returns on a log scale.
 5.  **Click "Update Plot":** This will fetch the data and generate the initial plot.
 6.  **Fine-tune Plotted Date Range:** Use the double-handled slider above the plot to zoom into specific periods within the downloaded data range. The plot will update automatically (or upon clicking "Update Plot" again, depending on implementation choices for the slider's effect).
+
+
+---
+<br>
+
+![](images/example.png)
