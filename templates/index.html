@@ -332,98 +332,77 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js" integrity="sha512-UOJe4paV6hYWBnS0c9GnIRH8PLm2nFK22uhfAvsTIqd3uwnWsVri1OPn5fJYdLtGY3wB11LGHJ4yPU1WFJeBYQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script>
+    <script>
         document.addEventListener('DOMContentLoaded', function () {
             const dateSliderElement = document.getElementById('date-slider');
             const startDateReadout = document.getElementById('slider-start-date-readout');
             const endDateReadout = document.getElementById('slider-end-date-readout');
             const hiddenFineTuneStart = document.getElementById('fine_tune_start_hidden');
             const hiddenFineTuneEnd = document.getElementById('fine_tune_end_hidden');
+            const mainForm = document.querySelector('.content-form'); // Get the main form element
 
             const minDataDateStr = "{{ min_data_date_str }}";
             const maxDataDateStr = "{{ max_data_date_str }}";
             let currentFineTuneStartStr = "{{ inputs.fine_tune_start }}";
             let currentFineTuneEndStr = "{{ inputs.fine_tune_end }}";
 
-            // --- Initial logging of values from Flask ---
             console.log("Flask minDataDateStr:", minDataDateStr);
             console.log("Flask maxDataDateStr:", maxDataDateStr);
             console.log("Flask inputs.fine_tune_start:", currentFineTuneStartStr);
             console.log("Flask inputs.fine_tune_end:", currentFineTuneEndStr);
 
-            if (!dateSliderElement || !minDataDateStr || !maxDataDateStr || minDataDateStr === "None" || maxDataDateStr === "None") {
+            if (!dateSliderElement || !minDataDateStr || !maxDataDateStr || minDataDateStr === "None" || maxDataDateStr === "None" || minDataDateStr === "" || maxDataDateStr === "") {
                 if(startDateReadout) startDateReadout.textContent = 'Range N/A';
                 if(endDateReadout) endDateReadout.textContent = 'Range N/A';
                 console.warn("Slider not initialized: HTML element missing, or min/max data dates are not available from Flask.", 
                              "minDataDateStr:", minDataDateStr, "maxDataDateStr:", maxDataDateStr);
-                return;
+                return; 
             }
             
-            // Fallback if fine_tune dates are missing from Flask (shouldn't happen if app.py is correct)
-            if (!currentFineTuneStartStr || currentFineTuneStartStr === "None") {
+            if (!currentFineTuneStartStr || currentFineTuneStartStr === "None" || currentFineTuneStartStr === "") {
                 currentFineTuneStartStr = minDataDateStr;
-                console.log("Fell back: currentFineTuneStartStr to minDataDateStr:", currentFineTuneStartStr);
             }
-            if (!currentFineTuneEndStr || currentFineTuneEndStr === "None") {
+            if (!currentFineTuneEndStr || currentFineTuneEndStr === "None" || currentFineTuneEndStr === "") {
                 currentFineTuneEndStr = maxDataDateStr;
-                console.log("Fell back: currentFineTuneEndStr to maxDataDateStr:", currentFineTuneEndStr);
             }
 
-
-            // --- Utility functions ---
-            function dateToTimestamp(dateInput) { // Renamed dateStr to dateInput for clarity
-                console.log('[dateToTimestamp CALLED] Input:', dateInput, 'Type:', typeof dateInput);
-
-                if (typeof dateInput === 'number') {
-                    // If it's already a number, assume it's a timestamp.
-                    // This is a defensive catch if it's called incorrectly.
-                    console.warn("[dateToTimestamp WARN] Received a number, assuming it's a timestamp:", dateInput);
-                    return dateInput; 
-                }
-
-                if (!dateInput || typeof dateInput !== 'string') {
-                    console.error("dateToTimestamp: Invalid dateInput or not a string", dateInput);
+            function dateToTimestamp(dateStr) {
+                console.log('[dateToTimestamp CALLED] Input:', dateStr, 'Type:', typeof dateStr);
+                if (!dateStr || typeof dateStr !== 'string') {
+                    console.error("dateToTimestamp: Invalid dateStr input or not a string", dateStr);
                     return NaN;
                 }
-                // Now, dateInput is definitely a string
-                const parts = dateInput.split('-');
+                const parts = dateStr.split('-');
                 if (parts.length === 3) {
                     const year = parseInt(parts[0]);
-                    const month = parseInt(parts[1]) - 1; // JS months are 0-indexed
+                    const month = parseInt(parts[1]) - 1; 
                     const day = parseInt(parts[2]);
                     if (isNaN(year) || isNaN(month) || isNaN(day)) {
-                        console.error("dateToTimestamp: Invalid date components after parsing", dateInput, parts);
+                        console.error("dateToTimestamp: Invalid date components after parsing", dateStr, parts);
                         return NaN;
                     }
                     return Date.UTC(year, month, day);
                 }
-                console.error("dateToTimestamp: dateInput string not in YYYY-MM-DD format", dateInput);
-                // Avoid new Date(non_standard_string).getTime() as it's unreliable
+                console.error("dateToTimestamp: dateInput string not in YYYY-MM-DD format", dateStr);
                 return NaN; 
             }
 
             function timestampToDate(timestamp) {
+                console.log('[timestampToDate CALLED] Input:', timestamp, 'Type:', typeof timestamp);
                 if (isNaN(timestamp) || timestamp === null || timestamp === undefined) {
                     console.error("timestampToDate: Invalid timestamp input", timestamp);
-                    return "NaN-aN-aN"; // Explicitly return this on error
+                    return "NaN-aN-aN"; 
                 }
                 const date = new Date(timestamp);
                 const year = date.getUTCFullYear();
                 const month = ('0' + (date.getUTCMonth() + 1)).slice(-2);
                 const day = ('0' + date.getUTCDate()).slice(-2);
-                const formattedDate = `${year}-${month}-${day}`;
-                // console.log("timestampToDate:", timestamp, "->", formattedDate);
-                return formattedDate;
+                return `${year}-${month}-${day}`;
             }
             
             let minTs = dateToTimestamp(minDataDateStr);
             let maxTs = dateToTimestamp(maxDataDateStr);
-            let startTs = dateToTimestamp(currentFineTuneStartStr);
-            let endTs = dateToTimestamp(currentFineTuneEndStr);
-
-            // --- Logging of initial timestamps ---
-            console.log("Initial Timestamps: minTs:", minTs, "maxTs:", maxTs, "startTs:", startTs, "endTs:", endTs);
-
+            
             if (isNaN(minTs) || isNaN(maxTs)) {
                 if(startDateReadout) startDateReadout.textContent = 'Error';
                 if(endDateReadout) endDateReadout.textContent = 'Error';
@@ -431,127 +410,105 @@
                                "MinDate:", minDataDateStr, "MaxDate:", maxDataDateStr);
                 return;
             }
-            if (minTs > maxTs) { // If min is somehow after max (data issue or parsing)
+            if (minTs > maxTs) { 
                 console.warn("minTs is greater than maxTs. Swapping them for slider range.", minTs, maxTs);
-                [minTs, maxTs] = [maxTs, minTs]; // Swap them
+                [minTs, maxTs] = [maxTs, minTs]; 
             }
-             if (minTs === maxTs) { // If only one day of data
-                console.warn("minTs equals maxTs. Slider will represent a single day. Adjusting step or disabling may be needed if problematic.");
-                // noUiSlider might need maxTs to be slightly larger than minTs for a range.
-                // For a single day, a slider isn't ideal, but let's try to make it work.
-                // If you must have a range, make maxTs one day after minTs, but this might not reflect actual data.
-                // For now, we let it be, but tooltips might be very close.
-                // maxTs = minTs + (24 * 60 * 60 * 1000); // Option: make it a one-day range
-            }
+            
+            let startTs = dateToTimestamp(currentFineTuneStartStr);
+            let endTs = dateToTimestamp(currentFineTuneEndStr);
 
+            console.log("Initial Timestamps before clamping: minTs:", minTs, "maxTs:", maxTs, "startTs:", startTs, "endTs:", endTs);
 
-            // Before noUiSlider.create, after minTs and maxTs are defined:
             let effectiveMaxTs = (maxTs <= minTs) ? (minTs + (24*60*60*1000 -1)) : maxTs;
+            if (isNaN(effectiveMaxTs)) effectiveMaxTs = minTs + (24*60*60*1000 -1); // Further fallback
 
-            // Ensure initial slider start/end values are within the overall min/max range
-            startTs = Math.max(minTs, Math.min(startTs, effectiveMaxTs)); // Use effectiveMaxTs
-            endTs = Math.min(effectiveMaxTs, Math.max(endTs, minTs));     // Use effectiveMaxTs
+            startTs = Math.max(minTs, Math.min(isNaN(startTs) ? minTs : startTs, effectiveMaxTs));
+            endTs = Math.min(effectiveMaxTs, Math.max(isNaN(endTs) ? effectiveMaxTs : endTs, minTs));     
+            
             if (startTs > endTs && minTs < effectiveMaxTs) {
-                console.warn("startTs > endTs after clamping, swapping. startTs:", startTs, "endTs:", endTs);
                 [startTs, endTs] = [endTs, startTs];
-            } else if (startTs > endTs && minTs === effectiveMaxTs) { 
+            } else if (startTs > endTs && minTs >= effectiveMaxTs) { 
                 endTs = startTs;
-            } else if (isNaN(startTs)){
+            }
+             // Ensure startTs is not NaN after all clamping. If it is, default to minTs.
+            if (isNaN(startTs)) startTs = minTs;
+            // Ensure endTs is not NaN. If it is, default to effectiveMaxTs.
+            if (isNaN(endTs)) endTs = effectiveMaxTs;
+            // Final check: if start is still somehow after end, reset to min/max
+            if (startTs > endTs) {
                 startTs = minTs;
-            } else if (isNaN(endTs)){
-                endTs = effectiveMaxTs; // Use effectiveMaxTs
+                endTs = effectiveMaxTs;
             }
 
 
-            // Update current fine tune strings and hidden inputs based on potentially clamped/corrected timestamps
             currentFineTuneStartStr = timestampToDate(startTs);
             currentFineTuneEndStr = timestampToDate(endTs);
             if (hiddenFineTuneStart) hiddenFineTuneStart.value = currentFineTuneStartStr;
             if (hiddenFineTuneEnd) hiddenFineTuneEnd.value = currentFineTuneEndStr;
 
-            // --- Logging of clamped/final timestamps for slider ---
             console.log("Clamped Timestamps for Slider: startTs:", startTs, "endTs:", endTs);
             console.log("Corresponding Dates: start:", currentFineTuneStartStr, "end:", currentFineTuneEndStr);
 
-
             noUiSlider.create(dateSliderElement, {
-                // In noUiSlider.create options:
                 range: {
                     'min': minTs,
-                    'max': (maxTs <= minTs) ? (minTs + (24*60*60*1000 -1)) : maxTs 
-                    // Ensure max is always > min for slider creation.
-                    // If original maxTs <= minTs, create a tiny range.
+                    'max': effectiveMaxTs 
                 },
-                start: [startTs, endTs], // These are numbers (timestamps)
+                start: [startTs, endTs], 
                 connect: true,
                 step: 24 * 60 * 60 * 1000, 
-                tooltips: false, // Explicitly false
+                tooltips: false, 
                 behaviour: 'tap-drag',
                 format: {
-                    // `to` takes the slider's internal numeric value (timestamp) and converts it to a string for display/output
                     to: function (value) { 
-                        // console.log('[format.to CALLED] Input (slider internal value):', value, 'Type:', typeof value);
-                        return timestampToDate(Number(value)); // Ensure value is treated as number
+                        return timestampToDate(Number(value)); 
                     },
-                    // `from` takes an external string value OR the initial numeric start values
-                    // and converts it to the slider's internal numeric value (timestamp)
                     from: function (value) { 
-                        console.log('[format.from CALLED] Input (value to convert to slider internal):', value, 'Type:', typeof value);
                         if (typeof value === 'string') {
-                            // Check if the string is a number (i.e., a stringified timestamp)
-                            // or if it contains hyphens (i.e., a "YYYY-MM-DD" date string)
                             if (value.includes('-')) { 
-                                // It's a "YYYY-MM-DD" string
                                 return dateToTimestamp(value);
                             } else {
-                                // It's likely a stringified timestamp, e.g., "1591056000000"
-                                // Convert it to a number first.
                                 const numericValue = parseFloat(value);
                                 if (!isNaN(numericValue)) {
-                                    console.log('[format.from INFO] Detected stringified timestamp, returning as number:', numericValue);
-                                    return numericValue; // Return the number (timestamp)
+                                    return numericValue; 
                                 } else {
-                                    console.error('[format.from ERROR] String value is not YYYY-MM-DD and not a parseable number:', value);
-                                    return dateToTimestamp(value); // Let dateToTimestamp handle it and likely return NaN with an error
+                                    return dateToTimestamp(value); 
                                 }
                             }
                         } else if (typeof value === 'number') {
-                            // This handles if noUiSlider ever passes a direct number (e.g. from internal calculations)
                             return value; 
                         }
-                        // Fallback for unexpected types
                         console.error("[format.from ERROR] Unexpected value type received:", value, typeof value);
                         return NaN;
                     }
                 }
             });
 
-            // The 'values' in the update event are now formatted by format.to, so they are date strings.
             dateSliderElement.noUiSlider.on('update', function (values, handle) {
-                // values should be an array of date strings like ["2023-01-15", "2023-08-20"]
-                // console.log('Slider update event, values:', values); 
                 if(startDateReadout) startDateReadout.textContent = values[0];
                 if(endDateReadout) endDateReadout.textContent = values[1];
                 if(hiddenFineTuneStart) hiddenFineTuneStart.value = values[0];
                 if(hiddenFineTuneEnd) hiddenFineTuneEnd.value = values[1];
             });
 
-            dateSliderElement.noUiSlider.on('update', function (values, handle) {
-                // values is an array of strings from the 'to' formatter, e.g., ["2023-01-15", "2023-08-20"]
-                if(startDateReadout) startDateReadout.textContent = values[0];
-                if(endDateReadout) endDateReadout.textContent = values[1];
-                if(hiddenFineTuneStart) hiddenFineTuneStart.value = values[0];
-                if(hiddenFineTuneEnd) hiddenFineTuneEnd.value = values[1];
+            // ***** NEW: Listen for the 'change' event to submit the form *****
+            dateSliderElement.noUiSlider.on('change', function (values, handle) {
+                console.log('Slider "change" event triggered. New values:', values);
+                // The 'update' event already updated the hidden input fields.
+                // Now, submit the main form.
+                if (mainForm) {
+                    mainForm.submit();
+                } else {
+                    console.error("Could not find the main form to submit.");
+                }
             });
             
-            // Set initial readout values correctly
             if(startDateReadout) startDateReadout.textContent = currentFineTuneStartStr;
             if(endDateReadout) endDateReadout.textContent = currentFineTuneEndStr;
 
-
-            // Client-side validation for overall date pickers
-            const startDateInputHTML = document.getElementById('start_date'); // Renamed to avoid conflict
-            const endDateInputHTML = document.getElementById('end_date');     // Renamed
+            const startDateInputHTML = document.getElementById('start_date'); 
+            const endDateInputHTML = document.getElementById('end_date');     
             if(startDateInputHTML && endDateInputHTML) {
                 startDateInputHTML.addEventListener('change', () => {
                     if (startDateInputHTML.value) endDateInputHTML.min = startDateInputHTML.value;
@@ -564,5 +521,7 @@
             }
         });
     </script>
+</body>
+</html>
 </body>
 </html>
