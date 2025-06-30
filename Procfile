@@ -1,1 +1,1 @@
-web: gunicorn app:app
+web: gunicorn --workers 3 --log-level info --timeout 120 app:app
