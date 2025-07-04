@@ -158,10 +158,9 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
 def index():
     # --- 1. Get and Validate User Inputs (No change here) ---
     default_end_dt = datetime.today()
-    default_start_dt = default_end_dt - timedelta(days=365 * 5)
-    symbols_req = request.args.get("symbols", "SOXL, SPXL, XLK")
+    symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ")
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
-    start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
+    start_date_req = request.args.get("start_date", "2025-04-24")
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
     
@@ -228,10 +227,9 @@ def plot_png():
     
     # --- 1. Get Inputs (same as index) ---
     default_end_dt = datetime.today()
-    default_start_dt = default_end_dt - timedelta(days=365 * 5)
-    symbols_req = request.args.get("symbols", "SOXL, SPXL, XLK")
+    symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ")
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
-    start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
+    start_date_req = request.args.get("start_date", "2025-04-24")
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
     
