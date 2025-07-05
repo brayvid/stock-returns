@@ -3,306 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css"></noscript>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css">
     <title>Compare Stocks | Blake Rayvid</title>
-    <meta name="description" content="Track and analyze stock and portfolio performance with real-time data and interactive charts. Your go-to dashboard for market insights.">
+    <meta name="description" content="Track and analyze stock and portfolio performance with real-time data and interactive charts.">
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
 
     <style>
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-            margin: 0; 
-            padding: 0; 
-            background-color: #f0f2f6; 
-            line-height: 1.6;
-        }
-        .page-wrapper { /* New overall wrapper for content */
-            padding: 15px;
-            max-width: 1200px; /* Optional: constrain max width on very large screens */
-            margin: 0 auto; /* Center content */
-        }
-        /* Form now acts as the main layout container for controls + plot */
-        .content-form {
-            display: flex;
-            flex-direction: column; /* Stack controls and plot area vertically */
-        }
-
-        .controls-area { /* Container for all input controls */
-            background-color: #ffffff;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            margin-bottom: 20px;
-        }
-        .controls-area h2 {
-            margin-top: 0;
-            margin-bottom: 15px;
-            font-size: 1.4em;
-            color: #333;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-        }
-        .control-group { /* Group related controls, e.g., symbols + benchmark */
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Responsive grid */
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-        .control-group > div { /* Each individual control wrapper */
-            display: flex;
-            flex-direction: column;
-        }
-        label { 
-            margin-bottom: 5px; 
-            font-weight: 600; 
-            font-size: 0.9em;
-            color: #444;
-        }
-        input[type="text"], 
-        input[type="date"],
-        select { /* Added select for consistency if used */
-            width: 100%; /* Full width of its container */
-            padding: 10px; 
-            border: 1px solid #ccc; 
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 0.95em;
-        }
-        input[type="checkbox"] { margin-right: 8px; vertical-align: middle; width: auto;}
-        .checkbox-label { display: inline; font-weight: normal; font-size: 0.95em; }
-
-        .fine-tune-slider-container {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #eee;
-        }
-        .fine-tune-slider-container h3 {
-            margin-top:0;
-            margin-bottom: 10px;
-            font-size: 1.1em;
-            color: #333;
-        }
-        #date-slider {
-            margin: 10px 5px; /* Add some horizontal margin for handles */
-        }
-        .date-readouts { 
-            display: flex; 
-            justify-content: space-between; 
-            margin-top: 8px; 
-            font-size: 0.9em; 
-            color: #555; 
-        }
-        .date-readouts span {
-            background-color: #e9ecef;
-            padding: 3px 8px;
-            border-radius: 3px;
-        }
-
-        button[type="submit"] { 
-            background-color: #0d66c5; 
-            color: white; 
-            padding: 12px 20px; 
-            border: none; 
-            border-radius: 5px; 
-            cursor: pointer; 
-            font-size: 1em; 
-            font-weight: 500;
-            width: 100%; /* Full width on mobile */
-            max-width: 250px; /* Max width on larger screens */
-            display: block; /* To allow margin auto for centering if not full width */
-            margin: 20px auto 0 auto; /* Center the button */
-        }
-        button[type="submit"]:hover { background-color: #0056b3; }
-
-        .plot-messages-area { /* Container for plot and messages */
-            background-color: #ffffff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-        }
-        .plot-messages-area h1 { display:none; /* Hide if title is in controls */ }
-
-        .plot-container img { 
-            max-width: 100%; 
-            width: 100%;
-            height: auto; 
-            border: 1px solid #ddd; 
-            border-radius: 4px; 
-            margin-top: 10px; /* Space from messages/error */
-            display: block; /* Ensure it behaves like a block */
-        }
-        
-        .messages-container { 
-            margin-top: 15px; 
-            max-height: 150px; /* Shorter height for messages */
-            overflow-y: auto; 
-            border: 1px solid #eee; 
-            padding:10px; 
-            background: #f9f9f9; 
-            border-radius: 4px;
-            font-size: 0.85em;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f2f6; line-height: 1.6; }
+        .page-wrapper { padding: 15px; max-width: 1200px; margin: 0 auto; }
+        .content-form { display: flex; flex-direction: column; }
+        .controls-area { background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .controls-area h2 { margin-top: 0; margin-bottom: 15px; font-size: 1.4em; color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .control-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        label { margin-bottom: 5px; font-weight: 600; font-size: 0.9em; color: #444; }
+        input[type="text"], input[type="date"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.95em; }
+        .checkbox-label { display: inline-flex; align-items: center; font-weight: normal; font-size: 0.95em; cursor: pointer; }
+        input[type="checkbox"] { margin-right: 8px; width: auto; }
+        .slider-container { margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; }
+        .slider-container h3 { margin-top:0; margin-bottom: 10px; font-size: 1.1em; color: #333; }
+        .slider-control { margin: 10px 5px; }
+        .readouts { display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9em; color: #555; }
+        .readouts span { background-color: #e9ecef; padding: 3px 8px; border-radius: 3px; }
+        button[type="submit"] { background-color: #0d66c5; color: white; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; width: 100%; max-width: 250px; display: block; margin: 20px auto 0 auto; }
+        .plot-messages-area { background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+        .plot-container img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; margin-top: 10px; display: block; }
+        .messages-container { margin-top: 15px; max-height: 150px; overflow-y: auto; border: 1px solid #eee; padding:10px; background: #f9f9f9; border-radius: 4px; font-size: 0.85em; }
         .message { padding: 8px; margin-bottom:8px; border-radius: 4px; }
-        .message.error-main { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; font-weight: bold; }
-        .message.info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb;}
-        .message.warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba;}
-        .message.detail-error { background-color: #fce8e6; color: #c92100; border: 1px solid #f5c6cb; opacity: 0.9;}
-
-        /* noUiSlider Customizations */
+        .message.error-main { background-color: #f8d7da; color: #721c24; }
+        .message.info { background-color: #d1ecf1; color: #0c5460; }
+        .message.warning { background-color: #fff3cd; color: #856404; }
+        .message.detail-error { background-color: #fce8e6; color: #c92100; }
         .noUi-connect { background: #4177b1; }
-        .noUi-handle { border: 1px solid #D9D9D9; border-radius: 3px; background: #FFF; box-shadow: inset 0 0 1px #FFF, inset 0 1px 7px #EBEBEB, 0 3px 6px -3px #BBB; }
-        .noUi-target { border-color: #ddd; }
-
-
-        /* Responsive adjustments - Desktop first approach can be easier sometimes, but here's mobile-first idea */
-        /* Default: single column for all up to a breakpoint */
-        /* .content-form, .controls-area, .plot-messages-area are already block/column by default */
-        
-        /* For larger screens, re-introduce sidebar or multi-column layouts if desired */
-        /* For this request, we keep it single column always and just refine grid */
-        /* Example of how a sidebar could be re-introduced on larger screens:
-        @media (min-width: 769px) {
-            .content-form {
-                flex-direction: row; // Put sidebar and main content side-by-side
-                gap: 20px;
-            }
-            .controls-area { // This would be the "sidebar"
-                width: 300px;
-                flex-shrink: 0;
-                margin-bottom: 0; // No bottom margin when side-by-side
-                height: calc(100vh - 30px); // Example height
-                overflow-y: auto;
-            }
-            .plot-messages-area { // This would be the "main content"
-                flex-grow: 1;
-            }
-            button[type="submit"] {
-                width: auto; // Button not full width in sidebar
-                margin: 20px 0 0 0;
-            }
-        }
-        */
-
-        .main-page-title { /* Style for the main title */
-            text-align: center;
-            color: #333;
-            margin-bottom: 20px;
-            font-size: 2.2em; /* Default size for larger screens */
-            font-weight: 600; /* Example font weight */
-        }
-
-        /* --- Responsive adjustments --- */
-        
-        /* For mobile devices (e.g., screens less than 768px wide) */
-        @media (max-width: 768px) {
-            .main-page-title {
-                font-size: 1.6em; /* Smaller font size for mobile */
-                margin-bottom: 15px; /* Adjust margin if needed */
-            }
-
-            .controls-area h2 { /* Example: also adjust controls area title */
-                font-size: 1.2em;
-            }
-
-            /* You can add other mobile-specific styles here */
-            input[type="text"], 
-            input[type="date"],
-            select {
-                padding: 8px; /* Slightly smaller padding on mobile inputs */
-                font-size: 0.9em;
-            }
-             button[type="submit"] {
-                padding: 10px 15px;
-                font-size: 0.95em;
-            }
-            .fine-tune-slider-container h3 {
-                font-size: 1em;
-            }
-        }
-
-        /* Optional: Even smaller screens */
-        @media (max-width: 480px) {
-            .main-page-title {
-                font-size: 1.4em; /* Even smaller for very small screens */
-            }
-             .controls-area h2 {
-                font-size: 1.1em;
-            }
-        }
-
+        .main-page-title { text-align: center; color: #333; margin-bottom: 20px; }
+        .main-page-title a { color: inherit; text-decoration: none; }
+        .main-page-title a:hover { text-decoration: underline; }
+        .options-group { display: flex; align-items: center; gap: 40px; flex-wrap: wrap; margin-top: 15px; padding-bottom: 10px; }
+        .smoothing-control { flex-grow: 1; max-width: 400px; }
+        .smoothing-control label { display: block; }
+        #smoothing-slider { margin-top: 8px; }
     </style>
-
-    <!-- Google tag (gtag.js) -->
-    <script>
-    window.addEventListener('load', function() {
-        setTimeout(function() {
-            var g = document.createElement('script');
-            var s = document.getElementsByTagName('script')[0];
-            g.async = true;
-            g.src = 'https://www.googletagmanager.com/gtag/js?id=G-ZXGDGE5KVR'; // Your ID
-            s.parentNode.insertBefore(g, s);
-
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-ZXGDGE5KVR');
-        }, 3000); // Delay in milliseconds (3000ms = 3s)
-    });
-    </script>
-
 </head>
 <body>
     <div class="page-wrapper">
-        <h1 class="main-page-title" style="text-align: center; color: #333; margin-bottom: 20px;">Compare Stock Returns</h1>
-        <p style="text-align:center; font-size: 0.9em" class="author"><a href="https://github.com/brayvid/stock-returns" target="_blank">View on GitHub</a></p>
+        <h1 class="main-page-title"><a href="/">Compare Stock Returns</a></h1>
+        
+        <p style="text-align:center; font-size: 0.9em; margin-top:-15px; margin-bottom: 25px;"><a href="https://github.com/brayvid/stock-returns" target="_blank">View on GitHub</a></p>
 
         <form method="GET" action="/" class="content-form">
             <div class="controls-area">
                 <h2>Chart Controls</h2>
                 
                 <div class="control-group">
-                    <div>
-                        <label for="symbols">Stock Symbols (comma-separated):</label>
-                        <input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}">
-                    </div>
-                    <div>
-                        <label for="benchmark">Benchmark Symbol:</label>
-                        <input type="text" id="benchmark" name="benchmark" value="{{ inputs.benchmark }}">
-                    </div>
+                    <div><label for="symbols">Symbols & Combinations:</label><input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}"></div>
+                    <div><label for="benchmark">Benchmark:</label><input type="text" id="benchmark" name="benchmark" value="{{ inputs.benchmark }}"></div>
                 </div>
 
                 <div class="control-group">
-                    <div>
-                        <label for="start_date">Start Date:</label>
-                        <input type="date" id="start_date" name="start_date" value="{{ inputs.start_date }}">
-                    </div>
-                    <div>
-                        <label for="end_date">End Date:</label>
-                        <input type="date" id="end_date" name="end_date" value="{{ inputs.end_date }}">
-                    </div>
+                    <div><label for="start_date">Start Date:</label><input type="date" id="start_date" name="start_date" value="{{ inputs.start_date }}"></div>
+                    <div><label for="end_date">End Date:</label><input type="date" id="end_date" name="end_date" value="{{ inputs.end_date }}"></div>
                 </div>
                 
-                <div> <!-- Checkbox group, not in grid directly for simpler layout -->
-                    <input type="checkbox" id="log_scale" name="log_scale" value="true" {% if inputs.log_scale %}checked{% endif %}>
-                    <label for="log_scale" class="checkbox-label">Logarithmic Scale</label>
+                <div class="options-group">
+                    <div>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="log_scale" name="log_scale" value="true" {% if inputs.log_scale %}checked{% endif %}>
+                            Logarithmic Scale
+                        </label>
+                    </div>
+                    <div class="smoothing-control">
+                        <label>Smoothing (Days): <b id="smoothing-readout">{{ inputs.smoothing_window }}</b></label>
+                        <div id="smoothing-slider" data-start="{{ inputs.smoothing_window }}"></div>
+                        <input type="hidden" id="smoothing_window" name="smoothing_window" value="{{ inputs.smoothing_window }}">
+                    </div>
                 </div>
 
-                {% if min_data_date_str and max_data_date_str %}
-                <div class="fine-tune-slider-container">
-                    <h3>Fine-tune Dates:</h3>
-                    <div id="date-slider"></div>
-                    <div class="date-readouts">
-                        <span id="slider-start-date-readout">Loading...</span>
-                        <span id="slider-end-date-readout">Loading...</span>
+                {% if plot_url and min_data_date_str and max_data_date_str %}
+                <div class="slider-container">
+                    <h3>Fine-tune Plot Range</h3>
+                    <div id="date-slider" 
+                         data-min="{{ min_data_date_str }}" 
+                         data-max="{{ max_data_date_str }}" 
+                         data-start="{{ inputs.fine_tune_start }}" 
+                         data-end="{{ inputs.fine_tune_end }}">
                     </div>
-                    <!-- Hidden inputs to store slider values for form submission -->
-                    <input type="hidden" id="fine_tune_start_hidden" name="fine_tune_start" value="{{ inputs.fine_tune_start }}">
-                    <input type="hidden" id="fine_tune_end_hidden" name="fine_tune_end" value="{{ inputs.fine_tune_end }}">
-                </div>
-                {% else %}
-                <div class="fine-tune-slider-container">
-                     <p style="font-size:0.9em; color:#777;"><em>Fine-tune range slider will appear after initial data is loaded.</em></p>
+                    <div class="readouts">
+                        <span id="date-readout-start"></span>
+                        <span id="date-readout-end"></span>
+                    </div>
+                    <input type="hidden" id="fine_tune_start" name="fine_tune_start" value="{{ inputs.fine_tune_start }}">
+                    <input type="hidden" id="fine_tune_end" name="fine_tune_end" value="{{ inputs.fine_tune_end }}">
                 </div>
                 {% endif %}
                 
@@ -310,228 +99,115 @@
             </div>
 
             <div class="plot-messages-area">
-                {% if error %}
-                    <div class="message error-main">{{ error }}</div>
-                {% endif %}
-                
+                {% if error %}<div class="message error-main">{{ error }}</div>{% endif %}
                 {% if messages %}
                 <div class="messages-container">
-                    <h3 style="margin-top:0; font-size:1em; color:#333;">Processing Details:</h3>
+                    <!-- <h3 style="margin-top:0; font-size:1em; color:#333;">Processing Details:</h3> -->
                     {% for msg in messages %}
-                        {% if "⚠️" in msg or "warning" in msg.lower() %}
-                        <div class="message warning">{{ msg }}</div>
-                        {% elif ("error" in msg.lower() or "no valid data" in msg.lower() or "empty" in msg.lower() or "failed" in msg.lower() or "cannot" in msg.lower()) and msg != error %}
-                        <div class="message detail-error">{{ msg }}</div>
-                        {% elif msg != error %}
                         <div class="message info">{{ msg }}</div>
-                        {% endif %}
                     {% endfor %}
                 </div>
                 {% endif %}
-
                 {% if plot_url %}
                     <div class="plot-container">
                         <img src="{{ plot_url }}" alt="Stock Returns Plot">
                     </div>
-                {% elif not error and not messages and request.args and not plot_url %} 
-                     <div class="message warning" style="margin-top:15px;">No plot generated. Check parameters and processing details.</div>
-                {% elif not request.args %}
-                    <div class="message info" style="margin-top:15px;">Configure options and click "Update Plot" to see results.</div>
+                {% elif request.args and not error %} 
+                     <div class="message warning" style="margin-top:15px;">No plot generated. Check parameters.</div>
                 {% endif %}
             </div>
         </form>
     </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js" defer></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const dateSliderElement = document.getElementById('date-slider');
-            const startDateReadout = document.getElementById('slider-start-date-readout');
-            const endDateReadout = document.getElementById('slider-end-date-readout');
-            const hiddenFineTuneStart = document.getElementById('fine_tune_start_hidden');
-            const hiddenFineTuneEnd = document.getElementById('fine_tune_end_hidden');
-            const mainForm = document.querySelector('.content-form'); // Get the main form element
+    document.addEventListener('DOMContentLoaded', function () {
+        const mainForm = document.querySelector('.content-form');
+        if (!mainForm) return;
 
-            const minDataDateStr = "{{ min_data_date_str }}";
-            const maxDataDateStr = "{{ max_data_date_str }}";
-            let currentFineTuneStartStr = "{{ inputs.fine_tune_start }}";
-            let currentFineTuneEndStr = "{{ inputs.fine_tune_end }}";
-
-            console.log("Flask minDataDateStr:", minDataDateStr);
-            console.log("Flask maxDataDateStr:", maxDataDateStr);
-            console.log("Flask inputs.fine_tune_start:", currentFineTuneStartStr);
-            console.log("Flask inputs.fine_tune_end:", currentFineTuneEndStr);
-
-            if (!dateSliderElement || !minDataDateStr || !maxDataDateStr || minDataDateStr === "None" || maxDataDateStr === "None" || minDataDateStr === "" || maxDataDateStr === "") {
-                if(startDateReadout) startDateReadout.textContent = 'Range N/A';
-                if(endDateReadout) endDateReadout.textContent = 'Range N/A';
-                console.warn("Slider not initialized: HTML element missing, or min/max data dates are not available from Flask.", 
-                             "minDataDateStr:", minDataDateStr, "maxDataDateStr:", maxDataDateStr);
-                return; 
+        const logScaleToggle = document.getElementById('log_scale');
+        if (logScaleToggle) {
+            logScaleToggle.addEventListener('change', function() {
+                mainForm.submit();
+            });
+        }
+        
+        const fineTuneStartInput = document.getElementById('fine_tune_start');
+        const fineTuneEndInput = document.getElementById('fine_tune_end');
+        function setupDateResetListener(elementId) {
+            const dateInput = document.getElementById(elementId);
+            if (dateInput && fineTuneStartInput && fineTuneEndInput) {
+                dateInput.addEventListener('change', function() {
+                    fineTuneStartInput.value = '';
+                    fineTuneEndInput.value = '';
+                });
             }
+        }
+        setupDateResetListener('start_date');
+        setupDateResetListener('end_date');
+
+        const smoothingSliderEl = document.getElementById('smoothing-slider');
+        if (smoothingSliderEl) {
+            const smoothingInput = document.getElementById('smoothing_window');
+            const smoothingReadout = document.getElementById('smoothing-readout');
+            const startValue = parseInt(smoothingSliderEl.dataset.start, 10);
+
+            noUiSlider.create(smoothingSliderEl, {
+                start: [startValue],
+                connect: 'lower',
+                range: { 'min': 1, 'max': 120 },
+                step: 1
+            });
+
+            smoothingSliderEl.noUiSlider.on('update', function(values) {
+                const value = Math.round(values[0]);
+                smoothingInput.value = value;
+                smoothingReadout.textContent = value;
+            });
+
+            smoothingSliderEl.noUiSlider.on('change', function() { mainForm.submit(); });
+        }
+        
+        const dateSliderEl = document.getElementById('date-slider');
+        if (dateSliderEl) {
+            const toTimestamp = function(str) { return new Date(str + 'T00:00:00Z').getTime(); };
+            const fromTimestamp = function(ts) { return new Date(ts).toISOString().slice(0, 10); };
             
-            if (!currentFineTuneStartStr || currentFineTuneStartStr === "None" || currentFineTuneStartStr === "") {
-                currentFineTuneStartStr = minDataDateStr;
-            }
-            if (!currentFineTuneEndStr || currentFineTuneEndStr === "None" || currentFineTuneEndStr === "") {
-                currentFineTuneEndStr = maxDataDateStr;
-            }
-
-            function dateToTimestamp(dateStr) {
-                console.log('[dateToTimestamp CALLED] Input:', dateStr, 'Type:', typeof dateStr);
-                if (!dateStr || typeof dateStr !== 'string') {
-                    console.error("dateToTimestamp: Invalid dateStr input or not a string", dateStr);
-                    return NaN;
-                }
-                const parts = dateStr.split('-');
-                if (parts.length === 3) {
-                    const year = parseInt(parts[0]);
-                    const month = parseInt(parts[1]) - 1; 
-                    const day = parseInt(parts[2]);
-                    if (isNaN(year) || isNaN(month) || isNaN(day)) {
-                        console.error("dateToTimestamp: Invalid date components after parsing", dateStr, parts);
-                        return NaN;
-                    }
-                    return Date.UTC(year, month, day);
-                }
-                console.error("dateToTimestamp: dateInput string not in YYYY-MM-DD format", dateStr);
-                return NaN; 
-            }
-
-            function timestampToDate(timestamp) {
-                console.log('[timestampToDate CALLED] Input:', timestamp, 'Type:', typeof timestamp);
-                if (isNaN(timestamp) || timestamp === null || timestamp === undefined) {
-                    console.error("timestampToDate: Invalid timestamp input", timestamp);
-                    return "NaN-aN-aN"; 
-                }
-                const date = new Date(timestamp);
-                const year = date.getUTCFullYear();
-                const month = ('0' + (date.getUTCMonth() + 1)).slice(-2);
-                const day = ('0' + date.getUTCDate()).slice(-2);
-                return `${year}-${month}-${day}`;
-            }
+            const minTs = toTimestamp(dateSliderEl.dataset.min);
+            const maxTs = toTimestamp(dateSliderEl.dataset.max);
             
-            let minTs = dateToTimestamp(minDataDateStr);
-            let maxTs = dateToTimestamp(maxDataDateStr);
+            if (isNaN(minTs) || isNaN(maxTs) || minTs >= maxTs) return;
+
+            // --- FIXED LOGIC ---
+            // Get initial values, but provide a fallback to the min/max if they are empty
+            let startVal = dateSliderEl.dataset.start || dateSliderEl.dataset.min;
+            let endVal = dateSliderEl.dataset.end || dateSliderEl.dataset.max;
+            // --- END FIXED LOGIC ---
+
+            const startReadout = document.getElementById('date-readout-start');
+            const endReadout = document.getElementById('date-readout-end');
             
-            if (isNaN(minTs) || isNaN(maxTs)) {
-                if(startDateReadout) startDateReadout.textContent = 'Error';
-                if(endDateReadout) endDateReadout.textContent = 'Error';
-                console.error("Slider initialization failed: minTs or maxTs is NaN.", 
-                               "MinDate:", minDataDateStr, "MaxDate:", maxDataDateStr);
-                return;
-            }
-            if (minTs > maxTs) { 
-                console.warn("minTs is greater than maxTs. Swapping them for slider range.", minTs, maxTs);
-                [minTs, maxTs] = [maxTs, minTs]; 
-            }
-            
-            let startTs = dateToTimestamp(currentFineTuneStartStr);
-            let endTs = dateToTimestamp(currentFineTuneEndStr);
-
-            console.log("Initial Timestamps before clamping: minTs:", minTs, "maxTs:", maxTs, "startTs:", startTs, "endTs:", endTs);
-
-            let effectiveMaxTs = (maxTs <= minTs) ? (minTs + (24*60*60*1000 -1)) : maxTs;
-            if (isNaN(effectiveMaxTs)) effectiveMaxTs = minTs + (24*60*60*1000 -1); // Further fallback
-
-            startTs = Math.max(minTs, Math.min(isNaN(startTs) ? minTs : startTs, effectiveMaxTs));
-            endTs = Math.min(effectiveMaxTs, Math.max(isNaN(endTs) ? effectiveMaxTs : endTs, minTs));     
-            
-            if (startTs > endTs && minTs < effectiveMaxTs) {
-                [startTs, endTs] = [endTs, startTs];
-            } else if (startTs > endTs && minTs >= effectiveMaxTs) { 
-                endTs = startTs;
-            }
-             // Ensure startTs is not NaN after all clamping. If it is, default to minTs.
-            if (isNaN(startTs)) startTs = minTs;
-            // Ensure endTs is not NaN. If it is, default to effectiveMaxTs.
-            if (isNaN(endTs)) endTs = effectiveMaxTs;
-            // Final check: if start is still somehow after end, reset to min/max
-            if (startTs > endTs) {
-                startTs = minTs;
-                endTs = effectiveMaxTs;
-            }
-
-
-            currentFineTuneStartStr = timestampToDate(startTs);
-            currentFineTuneEndStr = timestampToDate(endTs);
-            if (hiddenFineTuneStart) hiddenFineTuneStart.value = currentFineTuneStartStr;
-            if (hiddenFineTuneEnd) hiddenFineTuneEnd.value = currentFineTuneEndStr;
-
-            console.log("Clamped Timestamps for Slider: startTs:", startTs, "endTs:", endTs);
-            console.log("Corresponding Dates: start:", currentFineTuneStartStr, "end:", currentFineTuneEndStr);
-
-            noUiSlider.create(dateSliderElement, {
-                range: {
-                    'min': minTs,
-                    'max': effectiveMaxTs 
-                },
-                start: [startTs, endTs], 
+            noUiSlider.create(dateSliderEl, {
+                // Use the new, guaranteed-to-be-valid values
+                start: [toTimestamp(startVal), toTimestamp(endVal)],
                 connect: true,
-                step: 24 * 60 * 60 * 1000, 
-                tooltips: false, 
+                range: { 'min': minTs, 'max': maxTs },
+                step: 24 * 60 * 60 * 1000,
                 behaviour: 'tap-drag',
-                format: {
-                    to: function (value) { 
-                        return timestampToDate(Number(value)); 
-                    },
-                    from: function (value) { 
-                        if (typeof value === 'string') {
-                            if (value.includes('-')) { 
-                                return dateToTimestamp(value);
-                            } else {
-                                const numericValue = parseFloat(value);
-                                if (!isNaN(numericValue)) {
-                                    return numericValue; 
-                                } else {
-                                    return dateToTimestamp(value); 
-                                }
-                            }
-                        } else if (typeof value === 'number') {
-                            return value; 
-                        }
-                        console.error("[format.from ERROR] Unexpected value type received:", value, typeof value);
-                        return NaN;
-                    }
-                }
             });
 
-            dateSliderElement.noUiSlider.on('update', function (values, handle) {
-                if(startDateReadout) startDateReadout.textContent = values[0];
-                if(endDateReadout) endDateReadout.textContent = values[1];
-                if(hiddenFineTuneStart) hiddenFineTuneStart.value = values[0];
-                if(hiddenFineTuneEnd) hiddenFineTuneEnd.value = values[1];
+            dateSliderEl.noUiSlider.on('update', function (values) {
+                const startDate = fromTimestamp(parseFloat(values[0]));
+                const endDate = fromTimestamp(parseFloat(values[1]));
+                if (fineTuneStartInput) fineTuneStartInput.value = startDate;
+                if (fineTuneEndInput) fineTuneEndInput.value = endDate;
+                startReadout.textContent = startDate;
+                endReadout.textContent = endDate;
             });
 
-            // ***** NEW: Listen for the 'change' event to submit the form *****
-            dateSliderElement.noUiSlider.on('change', function (values, handle) {
-                console.log('Slider "change" event triggered. New values:', values);
-                // The 'update' event already updated the hidden input fields.
-                // Now, submit the main form.
-                if (mainForm) {
-                    mainForm.submit();
-                } else {
-                    console.error("Could not find the main form to submit.");
-                }
-            });
-            
-            if(startDateReadout) startDateReadout.textContent = currentFineTuneStartStr;
-            if(endDateReadout) endDateReadout.textContent = currentFineTuneEndStr;
-
-            const startDateInputHTML = document.getElementById('start_date'); 
-            const endDateInputHTML = document.getElementById('end_date');     
-            if(startDateInputHTML && endDateInputHTML) {
-                startDateInputHTML.addEventListener('change', () => {
-                    if (startDateInputHTML.value) endDateInputHTML.min = startDateInputHTML.value;
-                });
-                endDateInputHTML.addEventListener('change', () => {
-                    if (endDateInputHTML.value) startDateInputHTML.max = endDateInputHTML.value;
-                });
-                if (startDateInputHTML.value) endDateInputHTML.min = startDateInputHTML.value;
-                if (endDateInputHTML.value) startDateInputHTML.max = endDateInputHTML.value;
-            }
-        });
+            dateSliderEl.noUiSlider.on('change', function () { mainForm.submit(); });
+        }
+    });
     </script>
-</body>
-</html>
 </body>
 </html>
