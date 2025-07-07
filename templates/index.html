@@ -40,7 +40,19 @@
         .options-group { display: flex; align-items: center; gap: 40px; flex-wrap: wrap; margin-top: 15px; padding-bottom: 10px; }
         .smoothing-control { flex-grow: 1; max-width: 400px; }
         .smoothing-control label { display: block; }
-        #smoothing-slider { margin-top: 8px; }
+        #smoothing-slider { margin-top: 8px; }        /* On screens 600px or less, adjust the layout for better mobile viewing */
+        @media (max-width: 600px) {
+            .options-group {
+                flex-direction: column;   /* Stack the items vertically */
+                align-items: flex-start;  /* Align them to the left */
+                gap: 20px;                /* Adjust the gap for vertical stacking */
+            }
+
+            .smoothing-control {
+                width: 100%; /* Allow the slider control to take the full width */
+                max-width: none; /* Remove the 400px max-width on mobile */
+            }
+        }
     </style>
 </head>
 <body>

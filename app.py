@@ -141,7 +141,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
 def index():
     default_end_dt = datetime.today()
     symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ")
-    start_date_req = request.args.get("start_date", "2025-04-08")
+    start_date_req = request.args.get("start_date", "2025-04-24")
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
@@ -185,23 +185,27 @@ def index():
                            combination_legend=combination_legend)
 
 
-# --- MODIFIED ROUTE ---
+# --- MODIFIED AND OPTIMIZED ROUTE ---
 @app.route('/plot.png')
 def plot_png():
+    # --- Step 1: Get user request parameters (No change) ---
     default_end_dt = datetime.today()
     symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ")
-    start_date_req = request.args.get("start_date", "2025-04-08")
+    start_date_req = request.args.get("start_date", "2025-04-24")
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
     smoothing_req = int(request.args.get("smoothing_window", 1))
-    
+
+    # --- Step 2: Get the full dataset for the broad date range (No change) ---
     combined_data, combination_legend, _ = get_processed_data(
         symbols_req, benchmark_req, start_date_req, end_date_req, smoothing_req
     )
 
-    if combined_data.empty: return Response(status=404)
+    if combined_data.empty:
+        return Response(status=404)
 
+    # --- Step 3: Determine the specific date range for the plot (No change) ---
     min_data_date = combined_data.index.min().to_pydatetime(warn=False)
     max_data_date = combined_data.index.max().to_pydatetime(warn=False)
     
@@ -212,24 +216,44 @@ def plot_png():
         plot_end_dt = datetime.strptime(fine_tune_end_str, "%Y-%m-%d")
     except (ValueError, TypeError):
         plot_start_dt, plot_end_dt = min_data_date, max_data_date
-    plot_data = combined_data.loc[plot_start_dt:plot_end_dt].copy()
 
-    if plot_data.empty or len(plot_data) < 2: return Response(status=404)
+    # --- Step 4: Slice the data and IMMEDIATELY release memory of the large DataFrame ---
+    # MODIFICATION: Slicing the data for the plot. No .copy() is needed here.
+    plot_data = combined_data.loc[plot_start_dt:plot_end_dt]
+    
+    # MODIFICATION: Explicitly delete the large, original DataFrame.
+    # This is the most critical change for reducing memory usage.
+    del combined_data
 
+    if plot_data.empty or len(plot_data) < 2:
+        return Response(status=404)
+
+    # --- Step 5: Normalize the sliced data and release intermediate memory ---
     first_valid_indices = plot_data.apply(lambda col: col.first_valid_index())
-    if first_valid_indices.empty: return Response(status=404)
+    if first_valid_indices.empty:
+        return Response(status=404)
+
+    # We make a copy here because we are going to modify it.
     normalized_data = plot_data.copy()
-    for col in plot_data.columns:
+
+    # MODIFICATION: Explicitly delete the intermediate DataFrame, as it's no longer needed.
+    del plot_data
+
+    for col in normalized_data.columns:
         first_idx = first_valid_indices.get(col)
         if first_idx is not None:
-            base_value = plot_data.loc[first_idx, col]
-            if base_value != 0: normalized_data[col] = plot_data[col] / base_value
+            # Use .at for faster single-value access
+            base_value = normalized_data.at[first_idx, col]
+            if base_value != 0:
+                normalized_data[col] /= base_value
         
+    # --- Step 6: Plotting Logic (No major changes, this part is efficient) ---
     fig, ax = plt.subplots(figsize=(12, 7))
     last_values = normalized_data.ffill().iloc[-1].sort_values(ascending=False)
     cmap = plt.get_cmap('tab10')
     color_map = {item: cmap(i % 10) for i, item in enumerate(c for c in last_values.index if c != benchmark_req)}
-    if benchmark_req in normalized_data.columns: color_map[benchmark_req] = 'black'
+    if benchmark_req in normalized_data.columns:
+        color_map[benchmark_req] = 'black'
 
     for name in last_values.index:
         display_name = combination_legend.get(name, name)
@@ -241,42 +265,39 @@ def plot_png():
     ax.grid(True, linestyle='--', alpha=0.6)
     ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1))
 
-    # --- NEW: Smart Date Ticker Logic ---
-    # Calculate the duration of the plotted data
     duration_days = (normalized_data.index.max() - normalized_data.index.min()).days
-
-    # Choose locator and formatter based on the duration
-    if duration_days > 365 * 3:  # More than 3 years: tick per year
+    if duration_days > 365 * 3:
         locator = mdates.YearLocator()
         formatter = mdates.DateFormatter('%Y')
-    elif duration_days > 180:  # More than 6 months: tick per quarter
+    elif duration_days > 180:
         locator = mdates.MonthLocator(interval=3)
         formatter = mdates.DateFormatter('%b %Y')
-    elif duration_days > 30:  # More than 1 month: tick per month
+    elif duration_days > 30:
         locator = mdates.MonthLocator()
         formatter = mdates.DateFormatter('%b %d')
-    else:  # Less than 1 month: let Matplotlib auto-format, but limit tick count
-        locator = plt.MaxNLocator(8) # Aim for a max of 8 ticks to avoid clutter
+    else:
+        locator = plt.MaxNLocator(8)
         formatter = mdates.DateFormatter('%m/%d')
-
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(formatter)
-    fig.autofmt_xdate() # Auto-rotate and align the tick labels nicely
-    # --- END: Smart Date Ticker Logic ---
+    fig.autofmt_xdate()
 
     if log_scale_req:
-        try: ax.set_yscale('log')
-        except Exception: pass
+        try:
+            ax.set_yscale('log')
+        except Exception:
+            pass # Ignore if data prevents log scale
     ax.yaxis.set_major_formatter(FuncFormatter(percent_gain_formatter))
     
     plt.tight_layout(rect=[0, 0, 0.85, 1])
     
+    # --- Step 7: Save plot to buffer and clean up Matplotlib figure (No change) ---
     output = io.BytesIO()
     plt.savefig(output, format='png', bbox_inches='tight', dpi=90)
-    plt.close(fig)
+    plt.close(fig) # This is correct and essential for preventing Matplotlib leaks
     output.seek(0)
+    
     return Response(output.getvalue(), mimetype='image/png')
-
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
