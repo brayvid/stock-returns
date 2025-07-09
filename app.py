@@ -6,14 +6,14 @@ from datetime import datetime, timedelta
 
 import matplotlib
 import matplotlib.pyplot as plt
-# --- MODIFIED: Added matplotlib.dates for smarter tick locating ---
 from matplotlib import dates as mdates
+from matplotlib.ticker import FuncFormatter, FixedLocator, NullLocator
+import numpy as np # <-- ADDED NUMPY IMPORT
 import pandas as pd
 import yfinance as yf
 from flask import Flask, render_template, request, Response
 from flask_caching import Cache
 from flask_compress import Compress
-from matplotlib.ticker import FuncFormatter
 
 # --- App & Cache Configuration (No Changes) ---
 matplotlib.use('Agg')
@@ -28,6 +28,8 @@ def percent_gain_formatter(x, _):
     try:
         pct = (x - 1.0) * 100
         if abs(pct) < 1e-2: return "0%"
+        # Show one decimal for small percentages for better granularity
+        if abs(pct) < 10: return f"{pct:.1f}%"
         return f"{pct:.0f}%"
     except (ValueError, TypeError): return ""
 def generate_code_for_combination(formula_str):
@@ -80,7 +82,6 @@ def parse_symbols_input(symbols_input_str):
 def download_data(tickers_tuple, start_str, end_str):
     data_dict, messages = {}, []
     if not tickers_tuple: return {}, []
-    # MODIFICATION: Using float32 can cut memory usage of numerical data by ~50%
     df_downloaded = yf.download(list(tickers_tuple), start=start_str, end=end_str, auto_adjust=True, progress=False, group_by='ticker').astype('float32')
     if df_downloaded.empty:
         messages.append(f"yfinance returned no data for the requested tickers and date range.")
@@ -103,7 +104,6 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
     raw_data_dict, download_messages = download_data(tickers_tuple, start_str, end_str)
     all_messages = parse_errors + download_messages
     if not raw_data_dict: return pd.DataFrame(), combo_legend, all_messages + ["Failed to download any underlying data."]
-    # MODIFICATION: Specify dtype to maintain memory savings
     underlying_df = pd.DataFrame(raw_data_dict).astype('float32')
     final_series_for_display = {}
     for item in parsed_symbols:
@@ -123,7 +123,6 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
     if benchmark_req and benchmark_req not in final_series_for_display and benchmark_req in underlying_df.columns:
         final_series_for_display[benchmark_req] = underlying_df[benchmark_req]
     if not final_series_for_display: return pd.DataFrame(), combo_legend, all_messages + ["Could not construct any series for plotting."]
-    # MODIFICATION: Specify dtype to maintain memory savings
     final_df = pd.DataFrame(final_series_for_display).sort_index().astype('float32')
     final_df.index = pd.to_datetime(final_df.index)
     if final_df.empty: return final_df, combo_legend, all_messages
@@ -190,7 +189,7 @@ def index():
 # --- MODIFIED AND OPTIMIZED ROUTE ---
 @app.route('/plot.png')
 def plot_png():
-    # --- Step 1: Get user request parameters (No change) ---
+    # --- Step 1-6: All data preparation steps remain unchanged ---
     default_end_dt = datetime.today()
     symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ, 0.98*VTI+4.6*TLT+1.3*IEI+3.4*DBC+0.2*GLD")
     start_date_req = request.args.get("start_date", "2025-04-24")
@@ -199,7 +198,6 @@ def plot_png():
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
     smoothing_req = int(request.args.get("smoothing_window", 1))
 
-    # --- Step 2: Get the full dataset for the broad date range (No change) ---
     combined_data, combination_legend, _ = get_processed_data(
         symbols_req, benchmark_req, start_date_req, end_date_req, smoothing_req
     )
@@ -207,7 +205,6 @@ def plot_png():
     if combined_data.empty:
         return Response(status=404)
 
-    # --- Step 3: Determine the specific date range for the plot (No change) ---
     min_data_date = combined_data.index.min().to_pydatetime(warn=False)
     max_data_date = combined_data.index.max().to_pydatetime(warn=False)
     
@@ -219,14 +216,33 @@ def plot_png():
     except (ValueError, TypeError):
         plot_start_dt, plot_end_dt = min_data_date, max_data_date
 
-    # --- Step 4: Slice data & release memory (Retaining previous optimization) ---
     plot_data = combined_data.loc[plot_start_dt:plot_end_dt]
     del combined_data
 
     if plot_data.empty or len(plot_data) < 2:
         return Response(status=404)
+        
+    metrics = {}
+    TRADING_DAYS_PER_YEAR = 252
+    daily_returns = plot_data.pct_change()
+    has_benchmark = benchmark_req and benchmark_req in daily_returns.columns and daily_returns[benchmark_req].dropna().count() > 1
 
-    # --- Step 5: Normalize data & release memory (Retaining previous optimization) ---
+    for name in plot_data.columns:
+        asset_returns = daily_returns[name].dropna()
+        if len(asset_returns) < 2:
+            metrics[name] = {'beta': float('nan')}
+            continue
+        beta = float('nan')
+        if has_benchmark:
+            benchmark_returns = daily_returns[benchmark_req].dropna()
+            common_returns = pd.DataFrame({'asset': asset_returns, 'benchmark': benchmark_returns}).dropna()
+            if len(common_returns) >= 2:
+                benchmark_variance = common_returns['benchmark'].var()
+                if benchmark_variance > 0:
+                    covariance = common_returns['asset'].cov(common_returns['benchmark'])
+                    beta = covariance / benchmark_variance
+        metrics[name] = {'beta': beta}
+
     first_valid_indices = plot_data.apply(lambda col: col.first_valid_index())
     if first_valid_indices.empty: return Response(status=404)
     normalized_data = plot_data.copy()
@@ -239,13 +255,12 @@ def plot_png():
             if base_value != 0:
                 normalized_data[col] /= base_value
         
-    # --- Step 6: Plotting Logic ---
+    # --- Step 7: Plotting Logic ---
     fig, ax = plt.subplots(figsize=(12, 7))
     last_values = normalized_data.ffill().iloc[-1].sort_values(ascending=False)
     cmap = plt.get_cmap('tab10')
     color_map = {item: cmap(i % 10) for i, item in enumerate(c for c in last_values.index if c != benchmark_req)}
-    if benchmark_req in normalized_data.columns:
-        color_map[benchmark_req] = 'black'
+    if benchmark_req in normalized_data.columns: color_map[benchmark_req] = 'black'
 
     for name in last_values.index:
         display_name = combination_legend.get(name, name)
@@ -255,10 +270,21 @@ def plot_png():
     ax.set_title("Normalized Cumulative Returns")
     ax.set_ylabel("Return %")
     ax.grid(True, linestyle='--', alpha=0.6)
-    # MODIFICATION: The legend is placed outside, so we need to adjust the plot area to fit it.
-    ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1))
+    
+    if has_benchmark:
+        beta_lines = [f"Beta (vs. {benchmark_req})", "----------"]
+        for name in last_values.index:
+            if name == benchmark_req: continue
+            display_name = combination_legend.get(name, name)
+            m = metrics.get(name, {})
+            beta_val = m.get('beta')
+            if pd.notna(beta_val):
+                beta_lines.append(f"{display_name}: {beta_val:.2f}")
+        if len(beta_lines) > 2:
+            final_beta_text = "\n".join(beta_lines)
+            text_box_style = dict(boxstyle='round,pad=0.5', fc='white', ec='gray', lw=1, alpha=0.8)
+            ax.text(0.02, 0.98, final_beta_text, transform=ax.transAxes, fontsize=9, verticalalignment='top', bbox=text_box_style)
 
-    # ... (date formatting logic is unchanged) ...
     duration_days = (normalized_data.index.max() - normalized_data.index.min()).days
     if duration_days > 365 * 3:
         locator = mdates.YearLocator()
@@ -276,24 +302,85 @@ def plot_png():
     ax.xaxis.set_major_formatter(formatter)
     fig.autofmt_xdate()
 
+    # --- MODIFICATION START: Y-Axis Ticks and Scale ---
+    
+    def generate_geometric_ticks(ymin, ymax, num_ticks=8):
+        """Generates visually equidistant ticks for a log scale."""
+        if ymin <= 0 or ymax <= ymin:
+            return []
+        
+        # Calculate ticks in log space and convert back to data space
+        log_min = np.log10(ymin)
+        log_max = np.log10(ymax)
+        
+        # If the range crosses 1.0 (0% line), we must handle it specially
+        # to ensure 1.0 is a tick and spacing is visually consistent.
+        if ymin < 1.0 < ymax:
+            # Determine how many ticks fall above and below 1.0 based on log distance
+            log_dist_down = np.log10(1.0) - log_min
+            log_dist_up = log_max - np.log10(1.0)
+            total_log_dist = log_dist_up + log_dist_down
+            
+            # Allocate ticks proportionally, ensuring at least one on each side besides 1.0
+            ticks_up = int(np.ceil((num_ticks - 1) * log_dist_up / total_log_dist))
+            ticks_down = num_ticks - 1 - ticks_up
+            
+            ticks = []
+            if ticks_down > 0:
+                # Generate ticks from ymin up to (but not including) 1.0
+                ticks.extend(np.power(10, np.linspace(log_min, np.log10(1.0), ticks_down + 1)[:-1]))
+            
+            ticks.append(1.0) # Add the crucial 0% line
+            
+            if ticks_up > 0:
+                 # Generate ticks from 1.0 up to ymax
+                ticks.extend(np.power(10, np.linspace(np.log10(1.0), log_max, ticks_up + 1))[1:])
+                
+            return ticks
+
+        else: # The range is entirely above or entirely below 1.0
+            return np.power(10, np.linspace(log_min, log_max, num_ticks))
+
+    percent_formatter = FuncFormatter(percent_gain_formatter)
+    
+    # Apply to the left axis
     if log_scale_req:
         try:
             ax.set_yscale('log')
-        except Exception:
-            pass # Ignore if data prevents log scale
-    ax.yaxis.set_major_formatter(FuncFormatter(percent_gain_formatter))
+            ymin, ymax = ax.get_ylim()
+            dynamic_ticks = generate_geometric_ticks(ymin, ymax)
+            if dynamic_ticks:
+                ax.yaxis.set_major_locator(FixedLocator(dynamic_ticks))
+            ax.yaxis.set_minor_locator(NullLocator())
+        except (ValueError, TypeError):
+            ax.set_yscale('linear')
+            
+    ax.yaxis.set_major_formatter(percent_formatter)
     
-    # MODIFICATION: Change the layout call to be automatic. This is the fix.
-    plt.tight_layout()
+    # Apply to the right axis
+    ax_right = ax.twinx()
+    ax_right.set_yscale(ax.get_yscale())
+    ax_right.set_ylim(ax.get_ylim())
+    if log_scale_req and 'dynamic_ticks' in locals() and dynamic_ticks:
+        ax_right.yaxis.set_major_locator(FixedLocator(dynamic_ticks))
+    ax_right.yaxis.set_minor_locator(NullLocator())
+    ax_right.yaxis.set_major_formatter(percent_formatter)
+    # --- MODIFICATION END ---
+            
+    ax.legend(
+        loc='upper center',
+        bbox_to_anchor=(0.5, -0.2), 
+        ncol=min(len(last_values.index), 5),
+        frameon=False
+    )
     
-    # --- Step 7: Save plot to buffer and clean up Matplotlib figure ---
+    # --- Step 8: Save plot to buffer ---
     output = io.BytesIO()
-    # MODIFICATION: Use bbox_inches='tight' in savefig. This is crucial for ensuring
-    # the external legend is included in the final saved image.
     plt.savefig(output, format='png', bbox_inches='tight', dpi=90)
     plt.close(fig) 
     output.seek(0)
     
     return Response(output.getvalue(), mimetype='image/png')
+
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
