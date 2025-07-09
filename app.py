@@ -94,7 +94,7 @@ def download_data(tickers_tuple, start_str, end_str):
         except (KeyError, TypeError):
             messages.append(f"Failed to process or download data for {ticker}.")
     return data_dict, messages
-@cache.memoize()
+
 def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smoothing_window=1):
     parsed_symbols, underlying_tickers, parse_errors, combo_legend = parse_symbols_input(symbols_input_str)
     all_tickers_to_download = set(underlying_tickers)
