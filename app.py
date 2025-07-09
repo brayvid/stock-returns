@@ -80,7 +80,8 @@ def parse_symbols_input(symbols_input_str):
 def download_data(tickers_tuple, start_str, end_str):
     data_dict, messages = {}, []
     if not tickers_tuple: return {}, []
-    df_downloaded = yf.download(list(tickers_tuple), start=start_str, end=end_str, auto_adjust=True, progress=False, group_by='ticker')
+    # MODIFICATION: Using float32 can cut memory usage of numerical data by ~50%
+    df_downloaded = yf.download(list(tickers_tuple), start=start_str, end=end_str, auto_adjust=True, progress=False, group_by='ticker').astype('float32')
     if df_downloaded.empty:
         messages.append(f"yfinance returned no data for the requested tickers and date range.")
         return {}, messages
@@ -102,7 +103,8 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
     raw_data_dict, download_messages = download_data(tickers_tuple, start_str, end_str)
     all_messages = parse_errors + download_messages
     if not raw_data_dict: return pd.DataFrame(), combo_legend, all_messages + ["Failed to download any underlying data."]
-    underlying_df = pd.DataFrame(raw_data_dict)
+    # MODIFICATION: Specify dtype to maintain memory savings
+    underlying_df = pd.DataFrame(raw_data_dict).astype('float32')
     final_series_for_display = {}
     for item in parsed_symbols:
         name = item["name"]
@@ -121,7 +123,8 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
     if benchmark_req and benchmark_req not in final_series_for_display and benchmark_req in underlying_df.columns:
         final_series_for_display[benchmark_req] = underlying_df[benchmark_req]
     if not final_series_for_display: return pd.DataFrame(), combo_legend, all_messages + ["Could not construct any series for plotting."]
-    final_df = pd.DataFrame(final_series_for_display).sort_index()
+    # MODIFICATION: Specify dtype to maintain memory savings
+    final_df = pd.DataFrame(final_series_for_display).sort_index().astype('float32')
     final_df.index = pd.to_datetime(final_df.index)
     if final_df.empty: return final_df, combo_legend, all_messages
     first_valid_indices = final_df.apply(lambda col: col.first_valid_index())
@@ -133,7 +136,6 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
             all_messages.append(f"Chart starts on {common_start_date.strftime('%Y-%m-%d')} due to data availability.")
     if smoothing_window > 1:
         final_df = final_df.rolling(window=smoothing_window, min_periods=1).mean()
-        # all_messages.append(f"Applied a {smoothing_window}-day moving average.")
     return final_df.dropna(how='all'), combo_legend, all_messages
 
 # --- Controller Layer (Flask Routes - No Changes) ---
@@ -217,37 +219,27 @@ def plot_png():
     except (ValueError, TypeError):
         plot_start_dt, plot_end_dt = min_data_date, max_data_date
 
-    # --- Step 4: Slice the data and IMMEDIATELY release memory of the large DataFrame ---
-    # MODIFICATION: Slicing the data for the plot. No .copy() is needed here.
+    # --- Step 4: Slice data & release memory (Retaining previous optimization) ---
     plot_data = combined_data.loc[plot_start_dt:plot_end_dt]
-    
-    # MODIFICATION: Explicitly delete the large, original DataFrame.
-    # This is the most critical change for reducing memory usage.
     del combined_data
 
     if plot_data.empty or len(plot_data) < 2:
         return Response(status=404)
 
-    # --- Step 5: Normalize the sliced data and release intermediate memory ---
+    # --- Step 5: Normalize data & release memory (Retaining previous optimization) ---
     first_valid_indices = plot_data.apply(lambda col: col.first_valid_index())
-    if first_valid_indices.empty:
-        return Response(status=404)
-
-    # We make a copy here because we are going to modify it.
+    if first_valid_indices.empty: return Response(status=404)
     normalized_data = plot_data.copy()
-
-    # MODIFICATION: Explicitly delete the intermediate DataFrame, as it's no longer needed.
     del plot_data
 
     for col in normalized_data.columns:
         first_idx = first_valid_indices.get(col)
         if first_idx is not None:
-            # Use .at for faster single-value access
             base_value = normalized_data.at[first_idx, col]
             if base_value != 0:
                 normalized_data[col] /= base_value
         
-    # --- Step 6: Plotting Logic (No major changes, this part is efficient) ---
+    # --- Step 6: Plotting Logic ---
     fig, ax = plt.subplots(figsize=(12, 7))
     last_values = normalized_data.ffill().iloc[-1].sort_values(ascending=False)
     cmap = plt.get_cmap('tab10')
@@ -263,8 +255,10 @@ def plot_png():
     ax.set_title("Normalized Cumulative Returns")
     ax.set_ylabel("Return %")
     ax.grid(True, linestyle='--', alpha=0.6)
+    # MODIFICATION: The legend is placed outside, so we need to adjust the plot area to fit it.
     ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1))
 
+    # ... (date formatting logic is unchanged) ...
     duration_days = (normalized_data.index.max() - normalized_data.index.min()).days
     if duration_days > 365 * 3:
         locator = mdates.YearLocator()
@@ -289,15 +283,17 @@ def plot_png():
             pass # Ignore if data prevents log scale
     ax.yaxis.set_major_formatter(FuncFormatter(percent_gain_formatter))
     
-    plt.tight_layout(rect=[0, 0, 0.85, 1])
+    # MODIFICATION: Change the layout call to be automatic. This is the fix.
+    plt.tight_layout()
     
-    # --- Step 7: Save plot to buffer and clean up Matplotlib figure (No change) ---
+    # --- Step 7: Save plot to buffer and clean up Matplotlib figure ---
     output = io.BytesIO()
+    # MODIFICATION: Use bbox_inches='tight' in savefig. This is crucial for ensuring
+    # the external legend is included in the final saved image.
     plt.savefig(output, format='png', bbox_inches='tight', dpi=90)
-    plt.close(fig) # This is correct and essential for preventing Matplotlib leaks
+    plt.close(fig) 
     output.seek(0)
     
     return Response(output.getvalue(), mimetype='image/png')
-
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
