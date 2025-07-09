@@ -142,7 +142,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
 @app.route('/', methods=['GET'])
 def index():
     default_end_dt = datetime.today()
-    symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ")
+    symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ,0.98*VTI+4.6*TLT+1.3*IEI+3.4*DBC+0.2*GLD")
     start_date_req = request.args.get("start_date", "2025-04-24")
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
@@ -192,7 +192,7 @@ def index():
 def plot_png():
     # --- Step 1: Get user request parameters (No change) ---
     default_end_dt = datetime.today()
-    symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ")
+    symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ, 0.98*VTI+4.6*TLT+1.3*IEI+3.4*DBC+0.2*GLD")
     start_date_req = request.args.get("start_date", "2025-04-24")
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
