@@ -80,23 +80,58 @@ def parse_symbols_input(symbols_input_str):
             parsing_errors.append(f"Invalid format for: '{expr_str}'")
     return parsed_symbols_list, sorted(list(all_underlying_tickers_set)), parsing_errors, combination_legend
 
-# --- Data Layer (No Changes) ---
+# --- Data Layer (UPDATED to verify dividends) ---
 @cache.memoize()
 def download_data(tickers_tuple, start_str, end_str):
     data_dict, messages = {}, []
-    if not tickers_tuple: return {}, []
-    df_downloaded = yf.download(list(tickers_tuple), start=start_str, end=end_str, auto_adjust=True, progress=False, group_by='ticker').astype('float32')
-    if df_downloaded.empty:
-        messages.append(f"yfinance returned no data for the requested tickers and date range.")
-        return {}, messages
+    tickers_with_dividends = []
+    if not tickers_tuple:
+        return {}, [], [] # Return 3 items now
+
+    # --- Step 1: Download the main adjusted price data (Total Return) ---
+    # This remains the same to power the chart's core logic.
+    df_adjusted = yf.download(
+        list(tickers_tuple), start=start_str, end=end_str,
+        auto_adjust=True, progress=False, group_by='ticker'
+    ).astype('float32')
+
+    if df_adjusted.empty:
+        messages.append(f"yfinance returned no price data for the requested tickers and date range.")
+        return {}, [], messages
+
+    # --- Step 2: Download "actions" data to explicitly check for dividends ---
+    # We do this in a separate, efficient bulk call.
+    df_actions = yf.download(
+        list(tickers_tuple), start=start_str, end=end_str,
+        actions=True, progress=False, group_by='ticker'
+    )
+
+    # --- Step 3: Process each ticker ---
     for ticker in tickers_tuple:
+        # Get the adjusted price data for the chart
         try:
-            close_series = df_downloaded[ticker]['Close'] if len(tickers_tuple) > 1 else df_downloaded['Close']
-            if not close_series.dropna().empty: data_dict[ticker] = close_series.dropna()
-            else: messages.append(f"No valid 'Close' data found for {ticker}.")
+            close_series = df_adjusted[ticker]['Close'] if len(tickers_tuple) > 1 else df_adjusted['Close']
+            if not close_series.dropna().empty:
+                data_dict[ticker] = close_series.dropna()
+
+                # Now, check if this ticker ACTUALLY had dividends in the actions data
+                if not df_actions.empty:
+                    try:
+                        # For multi-ticker downloads, access is like df_actions[ticker]['Dividends']
+                        dividend_series = df_actions[ticker]['Dividends'] if len(tickers_tuple) > 1 else df_actions['Dividends']
+                        # If the sum of dividends in the period is greater than 0, it paid dividends.
+                        if dividend_series.sum() > 0:
+                            tickers_with_dividends.append(ticker)
+                    except (KeyError, TypeError):
+                        # This ticker might not have an actions column (e.g., if it's an index), which is fine.
+                        pass
+            else:
+                messages.append(f"No valid 'Close' data found for {ticker}.")
         except (KeyError, TypeError):
-            messages.append(f"Failed to process or download data for {ticker}.")
-    return data_dict, messages
+            messages.append(f"Failed to process or download price data for {ticker}.")
+
+    # Return the price data, the definitive list of dividend payers, and any messages.
+    return data_dict, sorted(list(set(tickers_with_dividends))), messages
 
 @cache.memoize()
 def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smoothing_window=1):
@@ -104,10 +139,13 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
     all_tickers_to_download = set(underlying_tickers)
     if benchmark_req: all_tickers_to_download.add(benchmark_req)
     if not all_tickers_to_download: return pd.DataFrame(), combo_legend, parse_errors + ["No valid symbols to process."]
+
     tickers_tuple = tuple(sorted(list(all_tickers_to_download)))
-    raw_data_dict, download_messages = download_data(tickers_tuple, start_str, end_str)
+    raw_data_dict, tickers_with_dividends, download_messages = download_data(tickers_tuple, start_str, end_str)
+
     all_messages = parse_errors + download_messages
     if not raw_data_dict: return pd.DataFrame(), combo_legend, all_messages + ["Failed to download any underlying data."]
+    
     underlying_df = pd.DataFrame(raw_data_dict).astype('float32')
     final_series_for_display = {}
     for item in parsed_symbols:
@@ -137,8 +175,11 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
         user_start_date = pd.to_datetime(start_str)
         if common_start_date.to_pydatetime(warn=False) > user_start_date:
             all_messages.append(f"Chart starts on {common_start_date.strftime('%Y-%m-%d')} due to data availability.")
-    if smoothing_window > 1:
-        final_df = final_df.rolling(window=smoothing_window, min_periods=1).mean()
+
+    # *** REMOVED: Smoothing logic is moved to the plotting function ***
+    # if smoothing_window > 1:
+    #     final_df = final_df.rolling(window=smoothing_window, min_periods=1).mean()
+
     return final_df.dropna(how='all'), combo_legend, all_messages
 
 # --- Controller Layer (Flask Routes - No Changes) ---
@@ -190,7 +231,6 @@ def index():
                            combination_legend=combination_legend)
 
 
-# --- HEAVILY OPTIMIZED PLOT ROUTE FOR MEMORY EFFICIENCY ---
 @app.route('/plot.png')
 def plot_png():
     # --- Step 1-2: Get user inputs and fetch cached/processed data ---
@@ -202,9 +242,9 @@ def plot_png():
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
     smoothing_req = int(request.args.get("smoothing_window", 1))
 
-    # This call is now cached again, preventing re-computation for identical requests
+    # The get_processed_data call is now cleaner, no longer passing the smoothing_req
     combined_data, combination_legend, _ = get_processed_data(
-        symbols_req, benchmark_req, start_date_req, end_date_req, smoothing_req
+        symbols_req, benchmark_req, start_date_req, end_date_req
     )
 
     if combined_data.empty: return Response(status=404)
@@ -219,15 +259,13 @@ def plot_png():
         plot_end_dt = datetime.strptime(fine_tune_end_str, "%Y-%m-%d")
     except (ValueError, TypeError):
         plot_start_dt, plot_end_dt = min_data_date, max_data_date
-    
-    # We create ONE DataFrame to work with.
+
     plot_data = combined_data.loc[plot_start_dt:plot_end_dt]
-    del combined_data # Free up the original DataFrame memory immediately.
+    del combined_data
 
     if plot_data.empty or len(plot_data) < 2: return Response(status=404)
 
-    # --- Step 4: Calculate Beta efficiently ---
-    # Create daily_returns, use it, and then DESTROY it.
+    # --- Step 4: Calculate Beta efficiently (This remains unchanged and correctly uses unsmoothed data) ---
     metrics = {}
     daily_returns = plot_data.pct_change()
     has_benchmark = benchmark_req and benchmark_req in daily_returns.columns and daily_returns[benchmark_req].dropna().count() > 1
@@ -241,12 +279,9 @@ def plot_png():
             if len(common_returns) >= 2:
                 covariance = common_returns['asset'].cov(common_returns['benchmark'])
                 metrics[name] = {'beta': covariance / benchmark_variance}
-    
-    del daily_returns # CRITICAL: Free up this large intermediate DataFrame.
+    del daily_returns
 
     # --- Step 5: Normalize data IN-PLACE for plotting ---
-    # Instead of making a new 'normalized_data' copy, we modify 'plot_data' directly.
-    # This avoids having two large DataFrames in memory at the same time.
     first_valid_indices = plot_data.apply(lambda col: col.first_valid_index())
     if first_valid_indices.empty: return Response(status=404)
 
@@ -255,13 +290,14 @@ def plot_png():
         if first_idx is not None:
             base_value = plot_data.at[first_idx, col]
             if base_value != 0:
-                plot_data[col] /= base_value # In-place normalization
-    
-    # From here on, 'plot_data' now holds the normalized values for plotting.
-        
-    # --- Step 6: Plotting Logic (Now uses the modified plot_data) ---
+                plot_data[col] /= base_value
+
+    # *** NEW: Apply smoothing AFTER normalization for a better visual result ***
+    if smoothing_req > 1:
+        plot_data = plot_data.rolling(window=smoothing_req, min_periods=1).mean()
+
+    # --- Step 6: Plotting Logic (Now uses the normalized and optionally smoothed data) ---
     fig, ax = plt.subplots(figsize=(12, 7))
-    # We use plot_data here now, which contains the normalized values
     last_values = plot_data.ffill().iloc[-1].sort_values(ascending=False)
     cmap = plt.get_cmap('tab10')
     color_map = {item: cmap(i % 10) for i, item in enumerate(c for c in last_values.index if c != benchmark_req)}
@@ -270,14 +306,13 @@ def plot_png():
     for name in last_values.index:
         display_name = combination_legend.get(name, name)
         linestyle = "--" if name == benchmark_req else "-"
-        # plot_data is now the normalized data
         ax.plot(plot_data.index, plot_data[name], label=display_name, color=color_map.get(name, 'grey'), linestyle=linestyle)
 
-    # --- The rest of the plotting function remains the same as your original ---
+    # The rest of the function remains the same...
     ax.set_title("Normalized Cumulative Returns")
     ax.set_ylabel("Return %")
     ax.grid(True, linestyle='--', alpha=0.6)
-    
+
     if has_benchmark:
         beta_lines = [f"Beta (vs. {benchmark_req})", "----------"]
         for name in last_values.index:
@@ -293,11 +328,28 @@ def plot_png():
             ax.text(0.02, 0.98, final_beta_text, transform=ax.transAxes, fontsize=9, verticalalignment='top', bbox=text_box_style)
 
     duration_days = (plot_data.index.max() - plot_data.index.min()).days
-    if duration_days > 365 * 3: locator = mdates.YearLocator(); formatter = mdates.DateFormatter('%Y')
-    elif duration_days > 180: locator = mdates.MonthLocator(interval=3); formatter = mdates.DateFormatter('%b %Y')
-    elif duration_days > 30: locator = mdates.MonthLocator(); formatter = mdates.DateFormatter('%b %d')
-    else: locator = plt.MaxNLocator(8); formatter = mdates.DateFormatter('%m/%d')
-    ax.xaxis.set_major_locator(locator); ax.xaxis.set_major_formatter(formatter); fig.autofmt_xdate()
+    duration_years = duration_days / 365.25
+    if duration_years > 10:
+        if duration_years > 40: tick_interval = 10
+        elif duration_years > 20: tick_interval = 5
+        else: tick_interval = 2
+        locator = mdates.YearLocator(base=tick_interval)
+        formatter = mdates.DateFormatter('%Y')
+    elif duration_years > 3:
+        locator = mdates.YearLocator()
+        formatter = mdates.DateFormatter('%Y')
+    elif duration_days > 180:
+        locator = mdates.MonthLocator(interval=3)
+        formatter = mdates.DateFormatter('%b %Y')
+    elif duration_days > 30:
+        locator = mdates.MonthLocator()
+        formatter = mdates.DateFormatter('%b %d')
+    else:
+        locator = plt.MaxNLocator(8)
+        formatter = mdates.DateFormatter('%m/%d')
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
+    fig.autofmt_xdate()
 
     def generate_geometric_ticks(ymin, ymax, num_ticks=8):
         if ymin <= 0 or ymax <= ymin: return []
@@ -322,15 +374,15 @@ def plot_png():
     ax_right = ax.twinx(); ax_right.set_yscale(ax.get_yscale()); ax_right.set_ylim(ax.get_ylim())
     if log_scale_req and 'dynamic_ticks' in locals() and dynamic_ticks: ax_right.yaxis.set_major_locator(FixedLocator(dynamic_ticks))
     ax_right.yaxis.set_minor_locator(NullLocator()); ax_right.yaxis.set_major_formatter(percent_formatter)
-            
+
     ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=min(len(last_values.index), 5), frameon=False)
-    
+
     output = io.BytesIO()
     plt.savefig(output, format='png', bbox_inches='tight', dpi=90)
-    plt.close(fig) 
+    plt.close(fig)
     output.seek(0)
-    
-    return Response(output.getvalue(), mimetype='image/png')
 
+    return Response(output.getvalue(), mimetype='image/png')
+    
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
