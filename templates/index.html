@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css">
-    <title>Compare Stocks | Blake Rayvid</title>
+    <title>Compare Stock Returns | Blake Rayvid</title>
     <meta name="description" content="Track and analyze stock and portfolio performance with real-time data and interactive charts.">
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
 
@@ -184,7 +184,7 @@
             noUiSlider.create(smoothingSliderEl, {
                 start: [startValue],
                 connect: 'lower',
-                range: { 'min': 1, 'max': 120 },
+                range: { 'min': 1, 'max': 90 },
                 step: 1
             });
 

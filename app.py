@@ -80,7 +80,7 @@ def parse_symbols_input(symbols_input_str):
             parsing_errors.append(f"Invalid format for: '{expr_str}'")
     return parsed_symbols_list, sorted(list(all_underlying_tickers_set)), parsing_errors, combination_legend
 
-# --- Data Layer (No Changes) ---
+# --- Data Layer (MODIFIED) ---
 @cache.memoize()
 def download_data(tickers_tuple, start_str, end_str):
     data_dict, messages = {}, []
@@ -122,10 +122,21 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
     all_tickers_to_download = set(underlying_tickers)
     if benchmark_req: all_tickers_to_download.add(benchmark_req)
     if not all_tickers_to_download: return pd.DataFrame(), combo_legend, parse_errors + ["No valid symbols to process."]
+
+    # === CHANGE: Adjust end date for yfinance download ===
+    # yfinance's `end` parameter is exclusive. To include data for the user-specified
+    # end_date, we need to request data up to the next day.
+    try:
+        end_date_dt_for_yf = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
+        yf_end_str = end_date_dt_for_yf.strftime("%Y-%m-%d")
+    except ValueError:
+        yf_end_str = end_str  # Fallback if the date format is unexpected
+
     tickers_tuple = tuple(sorted(list(all_tickers_to_download)))
-    raw_data_dict, tickers_with_dividends, download_messages = download_data(tickers_tuple, start_str, end_str)
+    raw_data_dict, tickers_with_dividends, download_messages = download_data(tickers_tuple, start_str, yf_end_str)
     all_messages = parse_errors + download_messages
     if not raw_data_dict: return pd.DataFrame(), combo_legend, all_messages + ["Failed to download any underlying data."]
+    
     underlying_df = pd.DataFrame(raw_data_dict).astype('float32')
     final_series_for_display = {}
     for item in parsed_symbols:
@@ -162,7 +173,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
 def index():
     default_end_dt = datetime.today()
     symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ,0.98*VTI+4.6*TLT+1.3*IEI+3.4*DBC+0.2*GLD")
-    start_date_req = request.args.get("start_date", "2025-04-24")
+    start_date_req = request.args.get("start_date", "2025-07-01")
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
@@ -211,7 +222,7 @@ def plot_png():
     # --- Step 1-2: Get user inputs and fetch cached/processed data (No Changes) ---
     default_end_dt = datetime.today()
     symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ, 0.98*VTI+4.6*TLT+1.3*IEI+3.4*DBC+0.2*GLD")
-    start_date_req = request.args.get("start_date", "2025-04-24")
+    start_date_req = request.args.get("start_date", "2025-07-01")
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
@@ -268,32 +279,27 @@ def plot_png():
     if smoothing_req > 1:
         plot_data = plot_data.rolling(window=smoothing_req, min_periods=1).mean()
 
-    # --- Step 6: Plotting Logic (MODIFIED) ---
+    # --- Step 6: Plotting Logic (No Changes) ---
     fig, ax = plt.subplots(figsize=(12, 7))
 
-    # === CHANGE 1: Consistent Color Mapping ===
     last_values = plot_data.ffill().iloc[-1].sort_values(ascending=False)
     cmap = plt.get_cmap('tab10')
-    # Sort all symbols alphabetically (excluding benchmark) to create a stable color order.
     all_symbols_sorted = sorted([c for c in plot_data.columns if c != benchmark_req])
     color_map = {item: cmap(i % 10) for i, item in enumerate(all_symbols_sorted)}
     if benchmark_req in plot_data.columns:
-        color_map[benchmark_req] = 'black' # Benchmark is always black
+        color_map[benchmark_req] = 'black'
 
-    # === CHANGE 2: Use Integer Index for Business Day Plotting ===
-    x_values = np.arange(len(plot_data)) # Create simple integer x-axis
+    x_values = np.arange(len(plot_data))
 
-    for name in last_values.index: # Iterate by performance to draw important lines on top
+    for name in last_values.index:
         display_name = combination_legend.get(name, name)
         linestyle = "--" if name == benchmark_req else "-"
-        # Plot using the integer index `x_values` instead of the DatetimeIndex
         ax.plot(x_values, plot_data[name], label=display_name, color=color_map.get(name, 'grey'), linestyle=linestyle)
 
     ax.set_title("Normalized Cumulative Returns")
     ax.set_ylabel("Return %")
     ax.grid(True, linestyle='--', alpha=0.6)
 
-    # Beta box logic (No Changes)
     if has_benchmark:
         beta_lines = [f"Beta (vs. {benchmark_req})", "----------"]
         for name in last_values.index:
@@ -308,20 +314,13 @@ def plot_png():
             text_box_style = dict(boxstyle='round,pad=0.5', fc='white', ec='gray', lw=1, alpha=0.8)
             ax.text(0.02, 0.98, final_beta_text, transform=ax.transAxes, fontsize=9, verticalalignment='top', bbox=text_box_style)
 
-    # === CHANGE 2 (continued): Custom X-Axis Tick Formatting ===
-    # Determine the appropriate date format string based on the time span of the data
     duration_days = (plot_data.index.max() - plot_data.index.min()).days
     duration_years = duration_days / 365.25
-    if duration_years > 3:
-        date_fmt = '%Y'
-    elif duration_days > 180:
-        date_fmt = '%b %Y'
-    elif duration_days > 30:
-        date_fmt = '%b %d'
-    else:
-        date_fmt = '%m/%d'
+    if duration_years > 3: date_fmt = '%Y'
+    elif duration_days > 180: date_fmt = '%b %Y'
+    elif duration_days > 30: date_fmt = '%b %d'
+    else: date_fmt = '%m/%d'
 
-    # A custom formatter that maps an integer index from the x-axis back to a formatted date string
     def business_day_formatter(x, pos):
         try:
             idx = int(round(x))
@@ -331,13 +330,10 @@ def plot_png():
             pass
         return ''
 
-    # Use MaxNLocator to find a good number of integer ticks on the 0..N-1 axis
     ax.xaxis.set_major_locator(plt.MaxNLocator(nbins=8, integer=True))
-    # Apply our custom formatter to translate integer ticks to date labels
     ax.xaxis.set_major_formatter(FuncFormatter(business_day_formatter))
     fig.autofmt_xdate()
 
-    # Y-axis and legend logic (No Changes)
     def generate_geometric_ticks(ymin, ymax, num_ticks=8):
         if ymin <= 0 or ymax <= ymin: return []
         log_min, log_max = np.log10(ymin), np.log10(ymax)
