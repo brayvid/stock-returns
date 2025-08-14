@@ -139,7 +139,8 @@
                 {% endif %}
                 {% if plot_url %}
                     <div class="plot-container">
-                        <img src="{{ plot_url }}" alt="Stock Returns Plot">
+                        <!-- ✅ FIXED: Added width and height to prevent layout shift -->
+                        <img src="{{ plot_url }}" alt="Stock Returns Plot" width="1080" height="630">
                     </div>
                 {% elif request.args and not error %} 
                      <div class="message warning" style="margin-top:15px;">No plot generated. Check parameters.</div>

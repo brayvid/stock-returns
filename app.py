@@ -365,7 +365,14 @@ def plot_png():
     plt.close(fig)
     output.seek(0)
 
-    return Response(output.getvalue(), mimetype='image/png')
+    # Create the response object
+    response = Response(output.getvalue(), mimetype='image/png')
+    
+    # ✅ ADD THIS: Tell browsers to cache the image for 10 minutes (600 seconds)
+    # This addresses the "efficient cache lifetimes" warning from PageSpeed.
+    response.headers['Cache-Control'] = 'public, max-age=600'
+    
+    return response
     
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
