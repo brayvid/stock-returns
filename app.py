@@ -1,6 +1,7 @@
 # --- IMPORTS ---
 import io
 import hashlib
+import math
 import re
 from datetime import datetime, timedelta
 
@@ -28,7 +29,6 @@ def percent_gain_formatter(x, _):
     try:
         pct = (x - 1.0) * 100
         if abs(pct) < 1e-2: return "0%"
-        # Show one decimal for small percentages for better granularity
         if abs(pct) < 10: return f"{pct:.1f}%"
         return f"{pct:.0f}%"
     except (ValueError, TypeError): return ""
@@ -80,13 +80,13 @@ def parse_symbols_input(symbols_input_str):
             parsing_errors.append(f"Invalid format for: '{expr_str}'")
     return parsed_symbols_list, sorted(list(all_underlying_tickers_set)), parsing_errors, combination_legend
 
-# --- Data Layer (MODIFIED) ---
+# --- Data Layer (No Changes) ---
 @cache.memoize()
 def download_data(tickers_tuple, start_str, end_str):
     data_dict, messages = {}, []
     tickers_with_dividends = []
     if not tickers_tuple:
-        return {}, [], [] # Return 3 items now
+        return {}, [], []
     df_adjusted = yf.download(
         list(tickers_tuple), start=start_str, end=end_str,
         auto_adjust=True, progress=False, group_by='ticker'
@@ -123,14 +123,11 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
     if benchmark_req: all_tickers_to_download.add(benchmark_req)
     if not all_tickers_to_download: return pd.DataFrame(), combo_legend, parse_errors + ["No valid symbols to process."]
 
-    # === CHANGE: Adjust end date for yfinance download ===
-    # yfinance's `end` parameter is exclusive. To include data for the user-specified
-    # end_date, we need to request data up to the next day.
     try:
         end_date_dt_for_yf = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
         yf_end_str = end_date_dt_for_yf.strftime("%Y-%m-%d")
     except ValueError:
-        yf_end_str = end_str  # Fallback if the date format is unexpected
+        yf_end_str = end_str
 
     tickers_tuple = tuple(sorted(list(all_tickers_to_download)))
     raw_data_dict, tickers_with_dividends, download_messages = download_data(tickers_tuple, start_str, yf_end_str)
@@ -219,7 +216,7 @@ def index():
 
 @app.route('/plot.png')
 def plot_png():
-    # --- Step 1-2: Get user inputs and fetch cached/processed data (No Changes) ---
+    # --- Step 1-3: Get user inputs, fetch data, fine-tune range (No Changes) ---
     default_end_dt = datetime.today()
     symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ, 0.98*VTI+4.6*TLT+1.3*IEI+3.4*DBC+0.2*GLD")
     start_date_req = request.args.get("start_date", "2025-07-01")
@@ -234,7 +231,6 @@ def plot_png():
 
     if combined_data.empty: return Response(status=404)
 
-    # --- Step 3: Fine-tune date range (No Changes) ---
     min_data_date = combined_data.index.min().to_pydatetime(warn=False)
     max_data_date = combined_data.index.max().to_pydatetime(warn=False)
     fine_tune_start_str = request.args.get("fine_tune_start", min_data_date.strftime("%Y-%m-%d"))
@@ -250,20 +246,37 @@ def plot_png():
 
     if plot_data.empty or len(plot_data) < 2: return Response(status=404)
 
-    # --- Step 4: Calculate Beta efficiently (No Changes) ---
+    # --- Step 4: Calculate Beta and Alpha (MODIFIED) ---
     metrics = {}
     daily_returns = plot_data.pct_change()
     has_benchmark = benchmark_req and benchmark_req in daily_returns.columns and daily_returns[benchmark_req].dropna().count() > 1
+    
     if has_benchmark:
         benchmark_returns = daily_returns[benchmark_req].dropna()
         benchmark_variance = benchmark_returns.var()
+
         for name in plot_data.columns:
-            if name == benchmark_req or benchmark_variance == 0: continue
+            if name == benchmark_req: continue
+            
             asset_returns = daily_returns[name].dropna()
             common_returns = pd.DataFrame({'asset': asset_returns, 'benchmark': benchmark_returns}).dropna()
-            if len(common_returns) >= 2:
+            
+            beta, alpha = None, None
+            if len(common_returns) >= 2 and benchmark_variance is not None and benchmark_variance > 0:
+                # Calculate Beta
                 covariance = common_returns['asset'].cov(common_returns['benchmark'])
-                metrics[name] = {'beta': covariance / benchmark_variance}
+                beta = covariance / benchmark_variance
+
+                # --- NEW, MORE ROBUST ALPHA CALCULATION ---
+                # This calculates alpha based on the daily excess returns (regression alpha).
+                # It is more stable over long periods than the CAGR-based method.
+                # Assumes risk-free rate is 0.
+                daily_alphas = common_returns['asset'] - (beta * common_returns['benchmark'])
+                
+                # Annualize by multiplying the mean daily alpha by trading days (252)
+                alpha = daily_alphas.mean() * 252
+            
+            metrics[name] = {'beta': beta, 'alpha': alpha}
     del daily_returns
 
     # --- Step 5: Normalize and Smooth Data (No Changes) ---
@@ -279,7 +292,7 @@ def plot_png():
     if smoothing_req > 1:
         plot_data = plot_data.rolling(window=smoothing_req, min_periods=1).mean()
 
-    # --- Step 6: Plotting Logic (No Changes) ---
+    # --- Step 6: Plotting Logic (No functional changes, just code placement) ---
     fig, ax = plt.subplots(figsize=(12, 7))
 
     last_values = plot_data.ffill().iloc[-1].sort_values(ascending=False)
@@ -294,29 +307,41 @@ def plot_png():
     for name in last_values.index:
         display_name = combination_legend.get(name, name)
         linestyle = "--" if name == benchmark_req else "-"
-        ax.plot(x_values, plot_data[name], label=display_name, color=color_map.get(name, 'grey'), linestyle=linestyle)
+        
+        y_last = last_values.get(name)
+        final_label = display_name
+        if pd.notna(y_last):
+            pct_change = (y_last - 1.0) * 100
+            final_label = f"{display_name} ({pct_change:+.1f}%)"
+
+        ax.plot(x_values, plot_data[name], label=final_label, color=color_map.get(name, 'grey'), linestyle=linestyle)
 
     ax.set_title("Normalized Cumulative Returns")
     ax.set_ylabel("Return %")
     ax.grid(True, linestyle='--', alpha=0.6)
 
     if has_benchmark:
-        beta_lines = [f"Beta (vs. {benchmark_req})", "----------"]
+        metric_lines = [f"Metrics (vs. {benchmark_req})", "--------------------"]
         for name in last_values.index:
             if name == benchmark_req: continue
             display_name = combination_legend.get(name, name)
             m = metrics.get(name, {})
-            beta_val = m.get('beta')
-            if beta_val is not None:
-                beta_lines.append(f"{display_name}: {beta_val:.2f}")
-        if len(beta_lines) > 2:
-            final_beta_text = "\n".join(beta_lines)
+            beta_val, alpha_val = m.get('beta'), m.get('alpha')
+            
+            line_parts = []
+            if beta_val is not None: line_parts.append(f"Beta: {beta_val:.2f}")
+            if alpha_val is not None: line_parts.append(f"Alpha: {alpha_val:.2f}")
+            
+            if line_parts: metric_lines.append(f"{display_name}: {', '.join(line_parts)}")
+
+        if len(metric_lines) > 2:
+            final_metric_text = "\n".join(metric_lines)
             text_box_style = dict(boxstyle='round,pad=0.5', fc='white', ec='gray', lw=1, alpha=0.8)
-            ax.text(0.02, 0.98, final_beta_text, transform=ax.transAxes, fontsize=9, verticalalignment='top', bbox=text_box_style)
+            ax.text(0.02, 0.98, final_metric_text, transform=ax.transAxes, fontsize=9,
+                    verticalalignment='top', bbox=text_box_style)
 
     duration_days = (plot_data.index.max() - plot_data.index.min()).days
-    duration_years = duration_days / 365.25
-    if duration_years > 3: date_fmt = '%Y'
+    if duration_days > 365.25 * 3: date_fmt = '%Y'
     elif duration_days > 180: date_fmt = '%b %Y'
     elif duration_days > 30: date_fmt = '%b %d'
     else: date_fmt = '%m/%d'
@@ -326,14 +351,13 @@ def plot_png():
             idx = int(round(x))
             if 0 <= idx < len(plot_data.index):
                 return plot_data.index[idx].strftime(date_fmt)
-        except (ValueError, IndexError):
-            pass
+        except (ValueError, IndexError): return ''
         return ''
 
     ax.xaxis.set_major_locator(plt.MaxNLocator(nbins=8, integer=True))
     ax.xaxis.set_major_formatter(FuncFormatter(business_day_formatter))
     fig.autofmt_xdate()
-
+    
     def generate_geometric_ticks(ymin, ymax, num_ticks=8):
         if ymin <= 0 or ymax <= ymin: return []
         log_min, log_max = np.log10(ymin), np.log10(ymax)
@@ -358,18 +382,28 @@ def plot_png():
     if log_scale_req and 'dynamic_ticks' in locals() and dynamic_ticks: ax_right.yaxis.set_major_locator(FixedLocator(dynamic_ticks))
     ax_right.yaxis.set_minor_locator(NullLocator()); ax_right.yaxis.set_major_formatter(percent_formatter)
 
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=min(len(last_values.index), 5), frameon=False)
+    handles, labels = ax.get_legend_handles_labels()
+    if labels:
+        ncol = min(len(labels), 5)
+        nrows = math.ceil(len(labels) / ncol)
+        reordered_handles, reordered_labels = [], []
+        for col in range(ncol):
+            for row in range(nrows):
+                idx = row * ncol + col
+                if idx < len(labels):
+                    reordered_handles.append(handles[idx])
+                    reordered_labels.append(labels[idx])
 
+        ax.legend(reordered_handles, reordered_labels,
+                  loc='upper center', bbox_to_anchor=(0.5, -0.2),
+                  ncol=ncol, frameon=False)
+    
     output = io.BytesIO()
-    plt.savefig(output, format='png', bbox_inches='tight', dpi=90)
+    plt.savefig(output, format='png', bbox_inches='tight', dpi=100)
     plt.close(fig)
     output.seek(0)
 
-    # Create the response object
     response = Response(output.getvalue(), mimetype='image/png')
-    
-    # ✅ ADD THIS: Tell browsers to cache the image for 10 minutes (600 seconds)
-    # This addresses the "efficient cache lifetimes" warning from PageSpeed.
     response.headers['Cache-Control'] = 'public, max-age=600'
     
     return response
