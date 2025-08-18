@@ -71,22 +71,14 @@
             }
         }
     </style>
-     <!-- Google tag (gtag.js) -->
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-ZXGDGE5KVR"></script>
     <script>
-    window.addEventListener('load', function() {
-        setTimeout(function() {
-            var g = document.createElement('script');
-            var s = document.getElementsByTagName('script')[0];
-            g.async = true;
-            g.src = 'https://www.googletagmanager.com/gtag/js?id=G-ZXGDGE5KVR'; // Your ID
-            s.parentNode.insertBefore(g, s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
 
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-ZXGDGE5KVR');
-        }, 3000); // Delay in milliseconds (3000ms = 3s)
-    });
+    gtag('config', 'G-ZXGDGE5KVR');
     </script>
 </head>
 <body>
