@@ -16,7 +16,7 @@ from flask import Flask, render_template, request, Response
 from flask_caching import Cache
 from flask_compress import Compress
 
-# --- App & Cache Configuration (No Changes) ---
+# --- App & Cache Configuration ---
 matplotlib.use('Agg')
 app = Flask(__name__)
 Compress(app)
@@ -24,7 +24,7 @@ app.config['CACHE_TYPE'] = 'SimpleCache'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 3600
 cache = Cache(app)
 
-# --- Plotting & Parsing Helpers (No Changes) ---
+# --- Plotting & Parsing Helpers ---
 def percent_gain_formatter(x, _):
     try:
         pct = (x - 1.0) * 100
@@ -80,7 +80,7 @@ def parse_symbols_input(symbols_input_str):
             parsing_errors.append(f"Invalid format for: '{expr_str}'")
     return parsed_symbols_list, sorted(list(all_underlying_tickers_set)), parsing_errors, combination_legend
 
-# --- Data Layer (No Changes) ---
+# --- Data Layer ---
 @cache.memoize()
 def download_data(tickers_tuple, start_str, end_str):
     data_dict, messages = {}, []
@@ -139,23 +139,80 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
     for item in parsed_symbols:
         name = item["name"]
         if item["is_simple"]:
-            if name in underlying_df.columns: final_series_for_display[name] = underlying_df[name]
-        else:
-            component_series_list, is_calculable = [], True
-            for coeff, ticker in item["components"]:
-                if ticker in underlying_df.columns and not underlying_df[ticker].empty:
-                    component_series_list.append(underlying_df[ticker] * coeff)
-                else:
-                    all_messages.append(f"Cannot calculate '{combo_legend[name]}': missing data for '{ticker}'.")
+            if name in underlying_df.columns:
+                final_series_for_display[name] = underlying_df[name]
+        else: # Handle complex expressions (portfolios)
+            components = item["components"]
+            # Fallback to original "buy-and-hold" logic if any coefficient is negative (e.g. for spreads/shorts)
+            if any(c[0] < 0 for c in components):
+                component_series_list, is_calculable = [], True
+                for coeff, ticker in components:
+                    if ticker in underlying_df.columns and not underlying_df[ticker].empty:
+                        component_series_list.append(underlying_df[ticker] * coeff)
+                    else:
+                        all_messages.append(f"Cannot calculate '{combo_legend[name]}': missing data for '{ticker}'.")
+                        is_calculable = False; break
+                if is_calculable and component_series_list:
+                    final_series_for_display[name] = pd.concat(component_series_list, axis=1).sum(axis=1, min_count=1)
+                continue
+
+            # --- New Quarterly Rebalancing Logic for positive-weight portfolios ---
+            portfolio_tickers = [ticker for _, ticker in components]
+            
+            # 1. Check data availability for all components
+            is_calculable = True
+            for ticker in portfolio_tickers:
+                if ticker not in underlying_df.columns or underlying_df[ticker].empty:
+                    all_messages.append(f"Cannot rebalance '{combo_legend[name]}': missing data for '{ticker}'.")
                     is_calculable = False; break
-            if is_calculable and component_series_list:
-                final_series_for_display[name] = pd.concat(component_series_list, axis=1).sum(axis=1, min_count=1)
+            if not is_calculable: continue
+
+            # 2. Prepare data subset for this portfolio
+            portfolio_data = underlying_df[portfolio_tickers].copy()
+            first_valid_date = portfolio_data.first_valid_index()
+            if pd.isna(first_valid_date): continue
+            
+            portfolio_data = portfolio_data.loc[first_valid_date:].ffill().dropna()
+            if portfolio_data.empty: continue
+
+            # 3. Calculate target weights from coefficients
+            total_weight = sum(coeff for coeff, _ in components)
+            if total_weight <= 0: continue
+            target_weights = {ticker: coeff / total_weight for coeff, ticker in components}
+
+            # 4. Run the simulation
+            portfolio_value = 1.0
+            shares = {ticker: 0.0 for ticker in portfolio_tickers}
+            portfolio_history = pd.Series(index=portfolio_data.index, dtype='float32')
+            last_rebalance_quarter = -1
+
+            for date, prices in portfolio_data.iterrows():
+                current_quarter = date.quarter
+                
+                # Rebalance on the first day or when the quarter changes
+                if last_rebalance_quarter == -1 or current_quarter != last_rebalance_quarter:
+                    for ticker, weight in target_weights.items():
+                        price = prices.get(ticker)
+                        if price is not None and price > 0:
+                            shares[ticker] = (portfolio_value * weight) / price
+                    last_rebalance_quarter = current_quarter
+                
+                # Calculate the portfolio's value for the current day
+                current_day_value = sum(shares[ticker] * prices.get(ticker, 0) for ticker in portfolio_tickers)
+                
+                portfolio_value = current_day_value if current_day_value > 0 else 0
+                portfolio_history.at[date] = portfolio_value
+
+            final_series_for_display[name] = portfolio_history
+
     if benchmark_req and benchmark_req not in final_series_for_display and benchmark_req in underlying_df.columns:
         final_series_for_display[benchmark_req] = underlying_df[benchmark_req]
     if not final_series_for_display: return pd.DataFrame(), combo_legend, all_messages + ["Could not construct any series for plotting."]
+    
     final_df = pd.DataFrame(final_series_for_display).sort_index().astype('float32')
     final_df.index = pd.to_datetime(final_df.index)
     if final_df.empty: return final_df, combo_legend, all_messages
+    
     first_valid_indices = final_df.apply(lambda col: col.first_valid_index())
     if not first_valid_indices.dropna().empty:
         common_start_date = first_valid_indices.max()
@@ -163,9 +220,10 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
         user_start_date = pd.to_datetime(start_str)
         if common_start_date.to_pydatetime(warn=False) > user_start_date:
             all_messages.append(f"Chart starts on {common_start_date.strftime('%Y-%m-%d')} due to data availability.")
+    
     return final_df.dropna(how='all'), combo_legend, all_messages
 
-# --- Controller Layer (Flask Routes - No Changes) ---
+# --- Controller Layer (Flask Routes) ---
 @app.route('/', methods=['GET'])
 def index():
     default_end_dt = datetime.today()
@@ -216,7 +274,7 @@ def index():
 
 @app.route('/plot.png')
 def plot_png():
-    # --- Step 1-3: Get user inputs, fetch data, fine-tune range (No Changes) ---
+    # --- Step 1-3: Get user inputs, fetch data, fine-tune range ---
     default_end_dt = datetime.today()
     symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ, 0.98*VTI+4.6*TLT+1.3*IEI+3.4*DBC+0.2*GLD")
     start_date_req = request.args.get("start_date", "2025-07-01")
@@ -246,7 +304,7 @@ def plot_png():
 
     if plot_data.empty or len(plot_data) < 2: return Response(status=404)
 
-    # --- Step 4: Calculate Beta and Alpha (MODIFIED) ---
+    # --- Step 4: Calculate Beta and Alpha ---
     metrics = {}
     daily_returns = plot_data.pct_change()
     has_benchmark = benchmark_req and benchmark_req in daily_returns.columns and daily_returns[benchmark_req].dropna().count() > 1
@@ -292,7 +350,7 @@ def plot_png():
     if smoothing_req > 1:
         plot_data = plot_data.rolling(window=smoothing_req, min_periods=1).mean()
 
-    # --- Step 6: Plotting Logic (No functional changes, just code placement) ---
+    # --- Step 6: Plotting Logic ---
     fig, ax = plt.subplots(figsize=(12, 7))
 
     last_values = plot_data.ffill().iloc[-1].sort_values(ascending=False)
