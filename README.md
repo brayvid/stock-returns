@@ -1,6 +1,6 @@
 # Compare Stock Returns
 
-A Flask web app to download, analyze, and compare the historical returns of publicly traded stocks against a benchmark.
+A Flask web app to compare the historical returns of publicly traded stock symbols against a benchmark.
 
 View the project here: **[stocks.blakerayvid.com](https://stocks.blakerayvid.com)**
 
@@ -29,7 +29,7 @@ View the project here: **[stocks.blakerayvid.com](https://stocks.blakerayvid.com
 ## Project Structure
 
 ```
-flask_stock_app/
+stock-returns/
 ├── app.py             # Main Flask application logic
 ├── static/            # Static files (CSS, JS, images)
 │   └── favicon.ico
@@ -43,15 +43,15 @@ flask_stock_app/
 
 1.  **Clone the repository (if applicable):**
     ```bash
-    git clone https://github.com/brayvid/compare-stock-returns.git
-    cd compare-stock-returns
+    git clone https://github.com/brayvid/stock-returns.git
+    cd stock-returns
     ```
 
 2.  **Create a Python virtual environment:**
     It's highly recommended to use a virtual environment to manage dependencies.
     ```bash
-    python3 -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    python3 -m venv .venv
+    source .venv/bin/activate  # On Windows: venv\Scripts\activate
     ```
 
 3.  **Install dependencies:**

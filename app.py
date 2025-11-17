@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import dates as mdates
+from matplotlib.lines import Line2D
 from matplotlib.ticker import FuncFormatter, FixedLocator, NullLocator
 import numpy as np
 import pandas as pd
@@ -44,7 +45,11 @@ def parse_single_combination_expression(expression_str_input):
     expression_for_parsing = expression_str
     if not (expression_str.startswith("+") or expression_str.startswith("-")):
         expression_for_parsing = "+" + expression_str
-    TICKER_REGEX = r"[A-Z0-9\.\-\^]+"
+        
+    # --- FIXED: Added '=' to the TICKER_REGEX to support futures, forex, etc. ---
+    TICKER_REGEX = r"[A-Z0-9\.\-\^\=]+" 
+    # --- END FIX ---
+
     term_pattern = re.compile(rf"([+\-])\s*(\d*\.?\d*)?\s*\*?\s*({TICKER_REGEX})")
     components, underlying_tickers, last_match_end = [], set(), 0
     for match in term_pattern.finditer(expression_for_parsing):
@@ -135,6 +140,20 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
     if not raw_data_dict: return pd.DataFrame(), combo_legend, all_messages + ["Failed to download any underlying data."]
     
     underlying_df = pd.DataFrame(raw_data_dict).astype('float32')
+
+    # --- FIX: Align data to benchmark's trading days to handle crypto/stock mixing ---
+    # This ensures that assets trading 24/7 (like BTC-USD) are sampled on the same
+    # days as traditional market assets, preventing gaps in the plot for stocks.
+    if benchmark_req and benchmark_req in underlying_df.columns and not underlying_df[benchmark_req].dropna().empty:
+        # Use the benchmark's valid days as the 'master' index for comparison
+        trading_days_index = underlying_df[benchmark_req].dropna().index
+        # Re-index the entire DataFrame. This will align all series to the benchmark's calendar.
+        # For 24/7 assets, it picks the last available price for that day.
+        underlying_df = underlying_df.reindex(trading_days_index)
+        # Forward-fill to handle any holidays or missing data points in other assets
+        underlying_df.ffill(inplace=True)
+    # --- END FIX ---
+
     final_series_for_display = {}
     for item in parsed_symbols:
         name = item["name"]
@@ -226,9 +245,20 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
 # --- Controller Layer (Flask Routes) ---
 @app.route('/', methods=['GET'])
 def index():
+    # --- Dynamic Default Start Date ---
+    today = datetime.today()
+    q_start_month = (today.month - 1) // 3 * 3 + 1
+    q_start_date = datetime(today.year, q_start_month, 1)
+    if today - q_start_date < timedelta(days=7):
+        prev_q_end = q_start_date - timedelta(days=1)
+        prev_q_start_month = (prev_q_end.month - 1) // 3 * 3 + 1
+        default_start_dt = datetime(prev_q_end.year, prev_q_start_month, 1)
+    else:
+        default_start_dt = q_start_date
+        
     default_end_dt = datetime.today()
-    symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ,0.98*VTI+4.6*TLT+1.3*IEI+3.4*DBC+0.2*GLD")
-    start_date_req = request.args.get("start_date", "2025-07-01")
+    symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ, BTC, GLD")
+    start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
@@ -275,9 +305,19 @@ def index():
 @app.route('/plot.png')
 def plot_png():
     # --- Step 1-3: Get user inputs, fetch data, fine-tune range ---
+    today = datetime.today()
+    q_start_month = (today.month - 1) // 3 * 3 + 1
+    q_start_date = datetime(today.year, q_start_month, 1)
+    if today - q_start_date < timedelta(days=7):
+        prev_q_end = q_start_date - timedelta(days=1)
+        prev_q_start_month = (prev_q_end.month - 1) // 3 * 3 + 1
+        default_start_dt = datetime(prev_q_end.year, prev_q_start_month, 1)
+    else:
+        default_start_dt = q_start_date
+        
     default_end_dt = datetime.today()
-    symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ, 0.98*VTI+4.6*TLT+1.3*IEI+3.4*DBC+0.2*GLD")
-    start_date_req = request.args.get("start_date", "2025-07-01")
+    symbols_req = request.args.get("symbols", "SOXX, XLK, AIQ, QTUM, BUZZ, BTC, GLD")
+    start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
@@ -326,18 +366,13 @@ def plot_png():
                 beta = covariance / benchmark_variance
 
                 # --- NEW, MORE ROBUST ALPHA CALCULATION ---
-                # This calculates alpha based on the daily excess returns (regression alpha).
-                # It is more stable over long periods than the CAGR-based method.
-                # Assumes risk-free rate is 0.
                 daily_alphas = common_returns['asset'] - (beta * common_returns['benchmark'])
-                
-                # Annualize by multiplying the mean daily alpha by trading days (252)
                 alpha = daily_alphas.mean() * 252
             
             metrics[name] = {'beta': beta, 'alpha': alpha}
     del daily_returns
 
-    # --- Step 5: Normalize and Smooth Data (No Changes) ---
+    # --- Step 5: Normalize and Smooth Data ---
     first_valid_indices = plot_data.apply(lambda col: col.first_valid_index())
     if first_valid_indices.empty: return Response(status=404)
 
@@ -378,8 +413,9 @@ def plot_png():
     ax.set_ylabel("Return %")
     ax.grid(True, linestyle='--', alpha=0.6)
 
+    # --- Color-coded legend for metrics ---
     if has_benchmark:
-        metric_lines = [f"Metrics (vs. {benchmark_req})", "--------------------"]
+        metric_legend_handles = []
         for name in last_values.index:
             if name == benchmark_req: continue
             display_name = combination_legend.get(name, name)
@@ -390,13 +426,21 @@ def plot_png():
             if beta_val is not None: line_parts.append(f"Beta: {beta_val:.2f}")
             if alpha_val is not None: line_parts.append(f"Alpha: {alpha_val:.2f}")
             
-            if line_parts: metric_lines.append(f"{display_name}: {', '.join(line_parts)}")
-
-        if len(metric_lines) > 2:
-            final_metric_text = "\n".join(metric_lines)
-            text_box_style = dict(boxstyle='round,pad=0.5', fc='white', ec='gray', lw=1, alpha=0.8)
-            ax.text(0.02, 0.98, final_metric_text, transform=ax.transAxes, fontsize=9,
-                    verticalalignment='top', bbox=text_box_style)
+            if line_parts:
+                label_text = f"{display_name}: {', '.join(line_parts)}"
+                line_color = color_map.get(name, 'grey')
+                metric_legend_handles.append(Line2D([0], [0], color=line_color, lw=2, label=label_text))
+        
+        if metric_legend_handles:
+            metrics_legend = ax.legend(handles=metric_legend_handles, 
+                                       loc='upper left', 
+                                       fontsize='small', 
+                                       title=f"Metrics vs. {benchmark_req}",
+                                       frameon=True,
+                                       facecolor='white',
+                                       edgecolor='gray',
+                                       framealpha=0.8)
+            ax.add_artist(metrics_legend)
 
     duration_days = (plot_data.index.max() - plot_data.index.min()).days
     if duration_days > 365.25 * 3: date_fmt = '%Y'
@@ -452,6 +496,7 @@ def plot_png():
                     reordered_handles.append(handles[idx])
                     reordered_labels.append(labels[idx])
 
+        # Main legend is now added last, after the metrics legend (if any) was added via ax.add_artist()
         ax.legend(reordered_handles, reordered_labels,
                   loc='upper center', bbox_to_anchor=(0.5, -0.2),
                   ncol=ncol, frameon=False)

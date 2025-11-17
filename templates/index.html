@@ -57,7 +57,9 @@
         .options-group { display: flex; align-items: center; gap: 40px; flex-wrap: wrap; margin-top: 15px; padding-bottom: 10px; }
         .smoothing-control { flex-grow: 1; max-width: 400px; }
         .smoothing-control label { display: block; }
-        #smoothing-slider { margin-top: 8px; }        /* On screens 600px or less, adjust the layout for better mobile viewing */
+        #smoothing-slider { margin-top: 8px; }        
+
+        /* On screens 600px or less, adjust the layout for better mobile viewing */
         @media (max-width: 600px) {
             .options-group {
                 flex-direction: column;   /* Stack the items vertically */
@@ -68,6 +70,11 @@
             .smoothing-control {
                 width: 100%; /* Allow the slider control to take the full width */
                 max-width: none; /* Remove the 400px max-width on mobile */
+            }
+            
+            /* Reduce title font size on mobile to prevent wrapping */
+            .main-page-title {
+                font-size: 1.75em; 
             }
         }
     </style>
@@ -140,7 +147,6 @@
                 {% if error %}<div class="message error-main">{{ error }}</div>{% endif %}
                 {% if messages %}
                 <div class="messages-container">
-                    <!-- <h3 style="margin-top:0; font-size:1em; color:#333;">Processing Details:</h3> -->
                     {% for msg in messages %}
                         <div class="message info">{{ msg }}</div>
                     {% endfor %}
@@ -148,7 +154,7 @@
                 {% endif %}
                 {% if plot_url %}
                     <div class="plot-container">
-                        <!-- ✅ FIXED: Added width and height to prevent layout shift -->
+                        <!-- Added width and height to prevent layout shift -->
                         <img src="{{ plot_url }}" alt="Stock Returns Plot" width="1080" height="630">
                     </div>
                 {% elif request.args and not error %} 
