@@ -76,6 +76,13 @@
             .main-page-title {
                 font-size: 1.75em; 
             }
+
+            /* --- NEW RULE START --- */
+            /* Force the date group into a 2-column layout on mobile */
+            .date-group {
+                grid-template-columns: 1fr 1fr;
+            }
+            /* --- NEW RULE END --- */
         }
     </style>
     <!-- Google tag (gtag.js) -->
@@ -99,11 +106,12 @@
                 <h2>Chart Controls</h2>
                 
                 <div class="control-group">
-                    <div><label for="symbols">Symbols & Combinations:</label><input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}"></div>
+                    <div><label for="symbols">Symbols & Portfolios (eg. 0.5*NVDA+0.2*GLD*0.01*BTC):</label><input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}"></div>
                     <div><label for="benchmark">Benchmark:</label><input type="text" id="benchmark" name="benchmark" value="{{ inputs.benchmark }}"></div>
                 </div>
 
-                <div class="control-group">
+                <!-- MODIFICATION: Added 'date-group' class -->
+                <div class="control-group date-group">
                     <div><label for="start_date">Start Date:</label><input type="date" id="start_date" name="start_date" value="{{ inputs.start_date }}"></div>
                     <div><label for="end_date">End Date:</label><input type="date" id="end_date" name="end_date" value="{{ inputs.end_date }}"></div>
                 </div>
