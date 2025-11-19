@@ -13,25 +13,31 @@
         footer {
             font-family: Helvetica, Arial, sans-serif;
             text-align: center;
-            padding: 30px 20px; /* Adjusted padding for better spacing */
+            padding: 30px 20px;
             font-size: 0.8rem;
-            color: #555; /* Using a dark gray for a softer look */
+            color: #555;
             transition: color 0.3s ease;
         }
         footer a {
-            color: inherit; /* Makes the link color the same as the footer text */
-            text-decoration: none; /* Removes the default underline */
-            transition: all 0.2s ease-in-out; /* Smooth transition for hover effect */
+            color: inherit;
+            text-decoration: none;
+            transition: all 0.2s ease-in-out;
         }
         footer a:hover {
-            color: #000; /* Darkens the link on hover */
-            text-decoration: underline; /* Adds underline on hover for clear interactivity */
+            color: #000;
+            text-decoration: underline;
         }
         .page-wrapper { padding: 15px; max-width: 1200px; margin: 0 auto; }
         .content-form { display: flex; flex-direction: column; }
         .controls-area { background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); margin-bottom: 20px; }
         .controls-area h2 { margin-top: 0; margin-bottom: 15px; font-size: 1.4em; color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-        .control-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        
+        /* --- MODIFIED: Added 'align-items: end' to align input boxes --- */
+        .control-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 15px; align-items: end; }
+        
+        .control-group > div {
+            min-width: 0; /* Fixes layout squishing from long strings */
+        }
         label { margin-bottom: 5px; font-weight: 600; font-size: 0.9em; color: #444; }
         input[type="text"], input[type="date"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.95em; }
         .checkbox-label { display: inline-flex; align-items: center; font-weight: normal; font-size: 0.95em; cursor: pointer; }
@@ -43,7 +49,15 @@
         .readouts span { background-color: #e9ecef; padding: 3px 8px; border-radius: 3px; }
         button[type="submit"] { background-color: #0d66c5; color: white; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; width: 100%; max-width: 250px; display: block; margin: 20px auto 0 auto; }
         .plot-messages-area { background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-        .plot-container img { width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; margin-top: 10px; display: block; }
+        .plot-container img {
+            width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: block;
+            aspect-ratio: 1080 / 630;
+        }
         .messages-container { margin-top: 15px; max-height: 150px; overflow-y: auto; border: 1px solid #eee; padding:10px; background: #f9f9f9; border-radius: 4px; font-size: 0.85em; }
         .message { padding: 8px; margin-bottom:8px; border-radius: 4px; }
         .message.error-main { background-color: #f8d7da; color: #721c24; }
@@ -59,30 +73,22 @@
         .smoothing-control label { display: block; }
         #smoothing-slider { margin-top: 8px; }        
 
-        /* On screens 600px or less, adjust the layout for better mobile viewing */
         @media (max-width: 600px) {
             .options-group {
-                flex-direction: column;   /* Stack the items vertically */
-                align-items: flex-start;  /* Align them to the left */
-                gap: 20px;                /* Adjust the gap for vertical stacking */
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 20px;
             }
-
             .smoothing-control {
-                width: 100%; /* Allow the slider control to take the full width */
-                max-width: none; /* Remove the 400px max-width on mobile */
+                width: 100%;
+                max-width: none;
             }
-            
-            /* Reduce title font size on mobile to prevent wrapping */
             .main-page-title {
                 font-size: 1.75em; 
             }
-
-            /* --- NEW RULE START --- */
-            /* Force the date group into a 2-column layout on mobile */
             .date-group {
                 grid-template-columns: 1fr 1fr;
             }
-            /* --- NEW RULE END --- */
         }
     </style>
     <!-- Google tag (gtag.js) -->
@@ -106,11 +112,10 @@
                 <h2>Chart Controls</h2>
                 
                 <div class="control-group">
-                    <div><label for="symbols">Symbols & Combinations:</label><input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}"></div>
+                    <div><label for="symbols">Symbols & Portfolios (eg. 0.5*NVDA+0.01*BTC):</label><input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}"></div>
                     <div><label for="benchmark">Benchmark:</label><input type="text" id="benchmark" name="benchmark" value="{{ inputs.benchmark }}"></div>
                 </div>
 
-                <!-- MODIFICATION: Added 'date-group' class -->
                 <div class="control-group date-group">
                     <div><label for="start_date">Start Date:</label><input type="date" id="start_date" name="start_date" value="{{ inputs.start_date }}"></div>
                     <div><label for="end_date">End Date:</label><input type="date" id="end_date" name="end_date" value="{{ inputs.end_date }}"></div>
@@ -162,8 +167,7 @@
                 {% endif %}
                 {% if plot_url %}
                     <div class="plot-container">
-                        <!-- Added width and height to prevent layout shift -->
-                        <img src="{{ plot_url }}" alt="Stock Returns Plot" width="1080" height="630">
+                        <img src="{{ plot_url }}" alt="Stock Returns Plot">
                     </div>
                 {% elif request.args and not error %} 
                      <div class="message warning" style="margin-top:15px;">No plot generated. Check parameters.</div>
@@ -231,17 +235,13 @@
             
             if (isNaN(minTs) || isNaN(maxTs) || minTs >= maxTs) return;
 
-            // --- FIXED LOGIC ---
-            // Get initial values, but provide a fallback to the min/max if they are empty
             let startVal = dateSliderEl.dataset.start || dateSliderEl.dataset.min;
             let endVal = dateSliderEl.dataset.end || dateSliderEl.dataset.max;
-            // --- END FIXED LOGIC ---
 
             const startReadout = document.getElementById('date-readout-start');
             const endReadout = document.getElementById('date-readout-end');
             
             noUiSlider.create(dateSliderEl, {
-                // Use the new, guaranteed-to-be-valid values
                 start: [toTimestamp(startVal), toTimestamp(endVal)],
                 connect: true,
                 range: { 'min': minTs, 'max': maxTs },

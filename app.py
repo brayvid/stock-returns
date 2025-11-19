@@ -22,7 +22,7 @@ from flask_compress import Compress
 MAX_UNIQUE_TICKERS = 30      # Max unique underlying tickers to download (e.g., in "SPY, 0.5*AAPL+0.5*GOOG", there are 3).
 MAX_DATE_RANGE_YEARS = 20    # Max years allowed between start and end date.
 MAX_REQUEST_SYMBOLS = 20     # Max number of comma-separated items in the symbols input field.
-
+MAX_LEGEND_LABEL_LENGTH = 55 # Max characters for a plot legend label before truncating.
 
 # --- App & Cache Configuration ---
 matplotlib.use('Agg')
@@ -36,6 +36,10 @@ cache = Cache(app)
 def percent_gain_formatter(x, _):
     try:
         pct = (x - 1.0) * 100
+        # --- FIX: Prevent displaying '-0.0%' for small negative numbers ---
+        if -0.05 < pct < 0:
+            pct = 0.0
+        # --- END FIX ---
         if abs(pct) < 1e-2: return "0%"
         if abs(pct) < 10: return f"{pct:.1f}%"
         return f"{pct:.0f}%"
@@ -340,6 +344,8 @@ def index():
                            combination_legend=combination_legend)
 
 
+# --- (Keep all code from IMPORTS down to the end of index() the same) ---
+
 @app.route('/plot.png')
 def plot_png():
     # --- Step 1-3: Get user inputs, fetch data, fine-tune range ---
@@ -399,11 +405,8 @@ def plot_png():
             
             beta, alpha = None, None
             if len(common_returns) >= 2 and benchmark_variance is not None and benchmark_variance > 0:
-                # Calculate Beta
                 covariance = common_returns['asset'].cov(common_returns['benchmark'])
                 beta = covariance / benchmark_variance
-
-                # --- NEW, MORE ROBUST ALPHA CALCULATION ---
                 daily_alphas = common_returns['asset'] - (beta * common_returns['benchmark'])
                 alpha = daily_alphas.mean() * 252
             
@@ -435,51 +438,64 @@ def plot_png():
 
     x_values = np.arange(len(plot_data))
 
+    # Plot lines without labels; we will build a custom unified legend later
     for name in last_values.index:
-        display_name = combination_legend.get(name, name)
         linestyle = "--" if name == benchmark_req else "-"
-        
-        y_last = last_values.get(name)
-        final_label = display_name
-        if pd.notna(y_last):
-            pct_change = (y_last - 1.0) * 100
-            final_label = f"{display_name} ({pct_change:+.1f}%)"
-
-        ax.plot(x_values, plot_data[name], label=final_label, color=color_map.get(name, 'grey'), linestyle=linestyle)
+        ax.plot(x_values, plot_data[name], color=color_map.get(name, 'grey'), linestyle=linestyle)
 
     ax.set_title("Normalized Cumulative Returns")
     ax.set_ylabel("Return %")
     ax.grid(True, linestyle='--', alpha=0.6)
 
-    # --- Color-coded legend for metrics ---
-    if has_benchmark:
-        metric_legend_handles = []
-        for name in last_values.index:
-            if name == benchmark_req: continue
-            display_name = combination_legend.get(name, name)
+    # --- REVISED: Unified Legend Logic with New Formatting ---
+    legend_handles = []
+    for name in last_values.index:
+        display_name = combination_legend.get(name, name)
+        
+        if len(display_name) > MAX_LEGEND_LABEL_LENGTH:
+            truncated_name = display_name[:MAX_LEGEND_LABEL_LENGTH - 3] + "..."
+        else:
+            truncated_name = display_name
+            
+        metric_parts = []
+        
+        # 1. Format Return
+        y_last = last_values.get(name)
+        if pd.notna(y_last):
+            pct_change = (y_last - 1.0) * 100
+            if -0.05 < pct_change < 0: pct_change = 0.0 # Fix -0.0% bug
+            metric_parts.append(f"Return: {pct_change:+.1f}%")
+
+        # 2. Format Beta and Alpha
+        if name in metrics:
             m = metrics.get(name, {})
             beta_val, alpha_val = m.get('beta'), m.get('alpha')
-            
-            line_parts = []
-            if beta_val is not None: line_parts.append(f"Beta: {beta_val:.2f}")
-            if alpha_val is not None: line_parts.append(f"Alpha: {alpha_val:.2f}")
-            
-            if line_parts:
-                label_text = f"{display_name}: {', '.join(line_parts)}"
-                line_color = color_map.get(name, 'grey')
-                metric_legend_handles.append(Line2D([0], [0], color=line_color, lw=2, label=label_text))
-        
-        if metric_legend_handles:
-            metrics_legend = ax.legend(handles=metric_legend_handles, 
-                                       loc='upper left', 
-                                       fontsize='small', 
-                                       title=f"Metrics vs. {benchmark_req}",
-                                       frameon=True,
-                                       facecolor='white',
-                                       edgecolor='gray',
-                                       framealpha=0.8)
-            ax.add_artist(metrics_legend)
+            if beta_val is not None:
+                metric_parts.append(f"Beta: {beta_val:.2f}")
+            if alpha_val is not None:
+                if -0.005 < alpha_val < 0: alpha_val = 0.0 # Fix -0.00 bug
+                metric_parts.append(f"Alpha: {alpha_val:.2f}")
 
+        # 3. Combine into final label string
+        if metric_parts:
+            label_text = f"{truncated_name} ({', '.join(metric_parts)})"
+        else:
+            label_text = truncated_name
+        
+        line_color = color_map.get(name, 'grey')
+        linestyle = "--" if name == benchmark_req else "-"
+        legend_handles.append(Line2D([0], [0], color=line_color, lw=2, linestyle=linestyle, label=label_text))
+
+    if legend_handles:
+        ax.legend(handles=legend_handles, 
+                  loc='upper left', 
+                  fontsize='small', 
+                  frameon=True,
+                  facecolor='white',
+                  edgecolor='gray',
+                  framealpha=0.8)
+
+    # --- Date Formatting Logic (Unchanged) ---
     duration_days = (plot_data.index.max() - plot_data.index.min()).days
     if duration_days > 365.25 * 3: date_fmt = '%Y'
     elif duration_days > 180: date_fmt = '%b %Y'
@@ -498,6 +514,7 @@ def plot_png():
     ax.xaxis.set_major_formatter(FuncFormatter(business_day_formatter))
     fig.autofmt_xdate()
     
+    # --- Y-Axis Formatting (Unchanged) ---
     def generate_geometric_ticks(ymin, ymax, num_ticks=8):
         if ymin <= 0 or ymax <= ymin: return []
         log_min, log_max = np.log10(ymin), np.log10(ymax)
@@ -521,26 +538,11 @@ def plot_png():
     ax_right = ax.twinx(); ax_right.set_yscale(ax.get_yscale()); ax_right.set_ylim(ax.get_ylim())
     if log_scale_req and 'dynamic_ticks' in locals() and dynamic_ticks: ax_right.yaxis.set_major_locator(FixedLocator(dynamic_ticks))
     ax_right.yaxis.set_minor_locator(NullLocator()); ax_right.yaxis.set_major_formatter(percent_formatter)
-
-    handles, labels = ax.get_legend_handles_labels()
-    if labels:
-        ncol = min(len(labels), 5)
-        nrows = math.ceil(len(labels) / ncol)
-        reordered_handles, reordered_labels = [], []
-        for col in range(ncol):
-            for row in range(nrows):
-                idx = row * ncol + col
-                if idx < len(labels):
-                    reordered_handles.append(handles[idx])
-                    reordered_labels.append(labels[idx])
-
-        # Main legend is now added last, after the metrics legend (if any) was added via ax.add_artist()
-        ax.legend(reordered_handles, reordered_labels,
-                  loc='upper center', bbox_to_anchor=(0.5, -0.2),
-                  ncol=ncol, frameon=False)
     
+    # --- Cleanup and Return (Unchanged) ---
+    fig.tight_layout(pad=1.0) 
     output = io.BytesIO()
-    plt.savefig(output, format='png', bbox_inches='tight', dpi=144)
+    plt.savefig(output, format='png', dpi=144)
     plt.close(fig)
     output.seek(0)
 
