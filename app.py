@@ -17,6 +17,13 @@ from flask import Flask, render_template, request, Response
 from flask_caching import Cache
 from flask_compress import Compress
 
+# --- CONSTANTS - RESOURCE LIMITS ---
+# To prevent excessive memory usage and costs from malicious or accidental large requests.
+MAX_UNIQUE_TICKERS = 30      # Max unique underlying tickers to download (e.g., in "SPY, 0.5*AAPL+0.5*GOOG", there are 3).
+MAX_DATE_RANGE_YEARS = 20    # Max years allowed between start and end date.
+MAX_REQUEST_SYMBOLS = 20     # Max number of comma-separated items in the symbols input field.
+
+
 # --- App & Cache Configuration ---
 matplotlib.use('Agg')
 app = Flask(__name__)
@@ -71,10 +78,24 @@ def parse_symbols_input(symbols_input_str):
     parsed_symbols_list, all_underlying_tickers_set, parsing_errors, combination_legend = [], set(), [], {}
     if not symbols_input_str.strip(): return [], [], [], {}
     raw_expressions = [s.strip() for s in symbols_input_str.split(',') if s.strip()]
+
+    # --- ADDED: Limit the number of requested portfolios/symbols ---
+    if len(raw_expressions) > MAX_REQUEST_SYMBOLS:
+        parsing_errors.append(f"Request limit exceeded: Please provide no more than {MAX_REQUEST_SYMBOLS} comma-separated symbols or portfolios.")
+        return [], [], parsing_errors, {}
+    # --- END ADDITION ---
+
     for expr_str in raw_expressions:
         components, underlying, is_simple = parse_single_combination_expression(expr_str)
         if components:
             all_underlying_tickers_set.update(underlying)
+
+            # --- ADDED: Limit the number of unique underlying tickers, failing fast ---
+            if len(all_underlying_tickers_set) > MAX_UNIQUE_TICKERS:
+                parsing_errors.append(f"Complexity limit exceeded: The total number of unique underlying tickers across all expressions cannot exceed {MAX_UNIQUE_TICKERS}.")
+                return [], [], parsing_errors, {} # Fail fast
+            # --- END ADDITION ---
+
             if is_simple:
                 parsed_symbols_list.append({"name": expr_str.upper(), "is_simple": True})
             else:
@@ -123,7 +144,24 @@ def download_data(tickers_tuple, start_str, end_str):
 
 @cache.memoize()
 def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smoothing_window=1):
+    # --- ADDED: Validate date range to prevent excessive data download ---
+    try:
+        start_dt = datetime.strptime(start_str, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_str, "%Y-%m-%d")
+        if (end_dt - start_dt).days > (MAX_DATE_RANGE_YEARS * 365.25):
+            error_msg = f"Date range limit exceeded: Please select a range no greater than {MAX_DATE_RANGE_YEARS} years."
+            return pd.DataFrame(), {}, [error_msg]
+    except (ValueError, TypeError):
+        # This case should be caught by the Flask route, but it's good practice to be defensive.
+        return pd.DataFrame(), {}, ["Invalid date format provided."]
+    # --- END ADDITION ---
+
     parsed_symbols, underlying_tickers, parse_errors, combo_legend = parse_symbols_input(symbols_input_str)
+
+    # --- MODIFIED: Handle parsing errors (including new limit errors) robustly ---
+    if parse_errors:
+        return pd.DataFrame(), combo_legend, parse_errors
+
     all_tickers_to_download = set(underlying_tickers)
     if benchmark_req: all_tickers_to_download.add(benchmark_req)
     if not all_tickers_to_download: return pd.DataFrame(), combo_legend, parse_errors + ["No valid symbols to process."]
@@ -502,7 +540,7 @@ def plot_png():
                   ncol=ncol, frameon=False)
     
     output = io.BytesIO()
-    plt.savefig(output, format='png', bbox_inches='tight', dpi=100)
+    plt.savefig(output, format='png', bbox_inches='tight', dpi=144)
     plt.close(fig)
     output.seek(0)
 
