@@ -32,7 +32,6 @@
         .controls-area { background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); margin-bottom: 20px; }
         .controls-area h2 { margin-top: 0; margin-bottom: 15px; font-size: 1.4em; color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; }
         
-        /* --- MODIFIED: Added 'align-items: end' to align input boxes --- */
         .control-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 15px; align-items: end; }
         
         .control-group > div {
@@ -86,8 +85,9 @@
             .main-page-title {
                 font-size: 1.75em; 
             }
-            .date-group {
-                grid-template-columns: 1fr 1fr;
+            /* --- MODIFIED: Force ALL control groups into a single column on small screens --- */
+            .control-group {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -112,7 +112,7 @@
                 <h2>Chart Controls</h2>
                 
                 <div class="control-group">
-                    <div><label for="symbols">Symbols & Portfolios (eg. 0.5*NVDA+0.01*BTC):</label><input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}"></div>
+                    <div><label for="symbols">Symbols & Portfolio Expressions (eg. 0.5*GOOGL+0.01*BTC):</label><input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}"></div>
                     <div><label for="benchmark">Benchmark:</label><input type="text" id="benchmark" name="benchmark" value="{{ inputs.benchmark }}"></div>
                 </div>
 

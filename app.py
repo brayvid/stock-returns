@@ -18,7 +18,7 @@ from flask_caching import Cache
 from flask_compress import Compress
 
 # --- CONSTANTS - RESOURCE LIMITS ---
-# To prevent excessive memory usage and costs from malicious or accidental large requests.
+# To prevent excessive memory usage and costs from large requests.
 MAX_UNIQUE_TICKERS = 30      # Max unique underlying tickers to download (e.g., in "SPY, 0.5*AAPL+0.5*GOOG", there are 3).
 MAX_DATE_RANGE_YEARS = 20    # Max years allowed between start and end date.
 MAX_REQUEST_SYMBOLS = 20     # Max number of comma-separated items in the symbols input field.
@@ -343,9 +343,6 @@ def index():
                            max_data_date_str=max_data_date.strftime("%Y-%m-%d"),
                            combination_legend=combination_legend)
 
-
-# --- (Keep all code from IMPORTS down to the end of index() the same) ---
-
 @app.route('/plot.png')
 def plot_png():
     # --- Step 1-3: Get user inputs, fetch data, fine-tune range ---
@@ -452,39 +449,47 @@ def plot_png():
     for name in last_values.index:
         display_name = combination_legend.get(name, name)
         
+        # Truncate the base name if it's too long to leave space for metrics
         if len(display_name) > MAX_LEGEND_LABEL_LENGTH:
             truncated_name = display_name[:MAX_LEGEND_LABEL_LENGTH - 3] + "..."
         else:
             truncated_name = display_name
             
-        metric_parts = []
-        
-        # 1. Format Return
+        # 1. Build the base label with name and return percentage
+        base_label = truncated_name
         y_last = last_values.get(name)
         if pd.notna(y_last):
             pct_change = (y_last - 1.0) * 100
             if -0.05 < pct_change < 0: pct_change = 0.0 # Fix -0.0% bug
-            metric_parts.append(f"Return: {pct_change:+.1f}%")
+            
+            # Use one decimal for small percentages, zero for larger ones
+            if abs(pct_change) < 10:
+                return_str = f" {pct_change:+.1f}%"
+            else:
+                return_str = f" {pct_change:+.0f}%"
+            base_label += return_str
 
-        # 2. Format Beta and Alpha
+        # 2. Prepare Beta and Alpha for the parenthetical part
+        metrics_in_parens = []
         if name in metrics:
             m = metrics.get(name, {})
             beta_val, alpha_val = m.get('beta'), m.get('alpha')
             if beta_val is not None:
-                metric_parts.append(f"Beta: {beta_val:.2f}")
+                metrics_in_parens.append(f"Beta: {beta_val:.2f}")
             if alpha_val is not None:
-                if -0.005 < alpha_val < 0: alpha_val = 0.0 # Fix -0.00 bug
-                metric_parts.append(f"Alpha: {alpha_val:.2f}")
-
-        # 3. Combine into final label string
-        if metric_parts:
-            label_text = f"{truncated_name} ({', '.join(metric_parts)})"
-        else:
-            label_text = truncated_name
+                if -0.005 < alpha_val < 0: alpha_val = 0.0 # Fix small negative display
+                metrics_in_parens.append(f"Alpha: {alpha_val:.2f}")
         
+        # 3. Combine into final label string
+        final_label = base_label
+        if metrics_in_parens:
+            final_label += f" ({', '.join(metrics_in_parens)})"
+        
+        # Create the legend handle with the final label
         line_color = color_map.get(name, 'grey')
         linestyle = "--" if name == benchmark_req else "-"
-        legend_handles.append(Line2D([0], [0], color=line_color, lw=2, linestyle=linestyle, label=label_text))
+        legend_handles.append(Line2D([0], [0], color=line_color, lw=2, linestyle=linestyle, label=final_label))
+
 
     if legend_handles:
         ax.legend(handles=legend_handles, 
@@ -542,7 +547,7 @@ def plot_png():
     # --- Cleanup and Return (Unchanged) ---
     fig.tight_layout(pad=1.0) 
     output = io.BytesIO()
-    plt.savefig(output, format='png', dpi=144)
+    plt.savefig(output, format='png', dpi=110)
     plt.close(fig)
     output.seek(0)
 
