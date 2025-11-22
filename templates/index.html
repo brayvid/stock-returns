@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css">
-    <title>Compare Stock Returns | Blake Rayvid</title>
-    <meta name="description" content="Track and analyze stock and portfolio performance with real-time data and interactive charts.">
+    <title>Stock Performance | Blake Rayvid</title>
+    <meta name="description" content="Compare multiple stock and portfolio performance with real-time data and interactive charts.">
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
 
     <style>
@@ -38,7 +38,20 @@
             min-width: 0; /* Fixes layout squishing from long strings */
         }
         label { margin-bottom: 5px; font-weight: 600; font-size: 0.9em; color: #444; }
-        input[type="text"], input[type="date"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.95em; }
+        
+        /* UPDATED: Added appearance fixes for iOS */
+        input[type="text"], input[type="date"] { 
+            width: 100%; 
+            padding: 10px; 
+            border: 1px solid #ccc; 
+            border-radius: 4px; 
+            box-sizing: border-box; 
+            font-size: 0.95em;
+            -webkit-appearance: none; /* Removes native iOS styling shadows/buttons */
+            appearance: none;
+            background-color: #fff; /* Ensures background is opaque on iOS */
+        }
+
         .checkbox-label { display: inline-flex; align-items: center; font-weight: normal; font-size: 0.95em; cursor: pointer; }
         input[type="checkbox"] { margin-right: 8px; width: auto; }
         .slider-container { margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; }
@@ -85,9 +98,23 @@
             .main-page-title {
                 font-size: 1.75em; 
             }
-            /* --- MODIFIED: Force ALL control groups into a single column on small screens --- */
+            
+            /* 1. Stack most controls vertically */
             .control-group {
                 grid-template-columns: 1fr;
+            }
+
+            /* 2. EXCEPTION: Force Dates to stay side-by-side (half width) */
+            .control-group.date-group {
+                grid-template-columns: 1fr 1fr; /* 50% width each */
+                gap: 10px; /* Smaller margin between dates */
+            }
+
+            /* 3. Fix Date Input styling for iOS Mobile */
+            .control-group.date-group input[type="date"] {
+                font-size: 16px; /* Prevents iOS zoom-in on focus */
+                padding: 8px 4px; /* Tighter padding to fit text */
+                min-width: 0; /* Ensures grid respects width */
             }
         }
     </style>
@@ -112,10 +139,11 @@
                 <h2>Chart Controls</h2>
                 
                 <div class="control-group">
-                    <div><label for="symbols">Symbols & Portfolio Expressions (eg. 0.5*GOOGL+0.01*BTC):</label><input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}"></div>
+                    <div><label for="symbols">Symbols & Portfolio Expressions:</label><input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}"></div>
                     <div><label for="benchmark">Benchmark:</label><input type="text" id="benchmark" name="benchmark" value="{{ inputs.benchmark }}"></div>
                 </div>
 
+                <!-- Added class "date-group" to target in CSS -->
                 <div class="control-group date-group">
                     <div><label for="start_date">Start Date:</label><input type="date" id="start_date" name="start_date" value="{{ inputs.start_date }}"></div>
                     <div><label for="end_date">End Date:</label><input type="date" id="end_date" name="end_date" value="{{ inputs.end_date }}"></div>
