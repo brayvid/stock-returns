@@ -35,11 +35,10 @@
         .control-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 15px; align-items: end; }
         
         .control-group > div {
-            min-width: 0; /* Fixes layout squishing from long strings */
+            min-width: 0; 
         }
         label { margin-bottom: 5px; font-weight: 600; font-size: 0.9em; color: #444; }
         
-        /* UPDATED: Added appearance fixes for iOS */
         input[type="text"], input[type="date"] { 
             width: 100%; 
             padding: 10px; 
@@ -47,9 +46,9 @@
             border-radius: 4px; 
             box-sizing: border-box; 
             font-size: 0.95em;
-            -webkit-appearance: none; /* Removes native iOS styling shadows/buttons */
+            -webkit-appearance: none;
             appearance: none;
-            background-color: #fff; /* Ensures background is opaque on iOS */
+            background-color: #fff;
         }
 
         .checkbox-label { display: inline-flex; align-items: center; font-weight: normal; font-size: 0.95em; cursor: pointer; }
@@ -85,37 +84,80 @@
         .smoothing-control label { display: block; }
         #smoothing-slider { margin-top: 8px; }        
 
+        /* --- Info Icon & Modal Styles --- */
+        .info-icon {
+            color: #0d66c5;
+            cursor: pointer;
+            margin-left: 5px;
+            font-size: 1.1em;
+            vertical-align: middle;
+            user-select: none;
+        }
+        .info-icon:hover { color: #0a58ca; }
+
+        .modal-overlay {
+            display: none; 
+            position: fixed; 
+            z-index: 1000; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.5); 
+            animation: fadeIn 0.2s;
+        }
+
+        .modal-box {
+            background-color: #fefefe;
+            margin: 5% auto; 
+            padding: 25px;
+            border: 1px solid #888;
+            width: 90%;
+            max-width: 600px; 
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            position: relative;
+        }
+
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 20px;
+        }
+        .close-btn:hover, .close-btn:focus { color: black; text-decoration: none; cursor: pointer; }
+
+        .modal-title { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #333; }
+        .modal-section { margin-bottom: 20px; }
+        .modal-section h4 { margin-bottom: 5px; color: #555; font-size: 1rem; }
+        .modal-section p { margin-top: 0; font-size: 0.9rem; color: #666; }
+        
+        code {
+            background-color: #f1f3f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: Consolas, Monaco, 'Andale Mono', monospace;
+            color: #c7254e;
+            font-size: 0.9em;
+            word-break: break-word;
+        }
+
+        @keyframes fadeIn {
+            from {opacity: 0;}
+            to {opacity: 1;}
+        }
+
         @media (max-width: 600px) {
-            .options-group {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 20px;
-            }
-            .smoothing-control {
-                width: 100%;
-                max-width: none;
-            }
-            .main-page-title {
-                font-size: 1.75em; 
-            }
-            
-            /* 1. Stack most controls vertically */
-            .control-group {
-                grid-template-columns: 1fr;
-            }
-
-            /* 2. EXCEPTION: Force Dates to stay side-by-side (half width) */
-            .control-group.date-group {
-                grid-template-columns: 1fr 1fr; /* 50% width each */
-                gap: 10px; /* Smaller margin between dates */
-            }
-
-            /* 3. Fix Date Input styling for iOS Mobile */
-            .control-group.date-group input[type="date"] {
-                font-size: 16px; /* Prevents iOS zoom-in on focus */
-                padding: 8px 4px; /* Tighter padding to fit text */
-                min-width: 0; /* Ensures grid respects width */
-            }
+            .options-group { flex-direction: column; align-items: flex-start; gap: 20px; }
+            .smoothing-control { width: 100%; max-width: none; }
+            .main-page-title { font-size: 1.75em; }
+            .control-group { grid-template-columns: 1fr; }
+            .control-group.date-group { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .control-group.date-group input[type="date"] { font-size: 16px; padding: 8px 4px; min-width: 0; }
+            .modal-box { margin: 15% auto; width: 85%; }
         }
     </style>
     <!-- Google tag (gtag.js) -->
@@ -124,7 +166,6 @@
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-
     gtag('config', 'G-ZXGDGE5KVR');
     </script>
 </head>
@@ -139,11 +180,13 @@
                 <h2>Chart Controls</h2>
                 
                 <div class="control-group">
-                    <div><label for="symbols">Symbols & Portfolio Expressions:</label><input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}"></div>
+                    <div>
+                        <label for="symbols">Symbols & Portfolio Expressions:<span class="info-icon" id="info-trigger" title="Click for formatting rules">&#9432;</span></label>
+                        <input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}">
+                    </div>
                     <div><label for="benchmark">Benchmark:</label><input type="text" id="benchmark" name="benchmark" value="{{ inputs.benchmark }}"></div>
                 </div>
 
-                <!-- Added class "date-group" to target in CSS -->
                 <div class="control-group date-group">
                     <div><label for="start_date">Start Date:</label><input type="date" id="start_date" name="start_date" value="{{ inputs.start_date }}"></div>
                     <div><label for="end_date">End Date:</label><input type="date" id="end_date" name="end_date" value="{{ inputs.end_date }}"></div>
@@ -203,11 +246,60 @@
             </div>
         </form>
     </div>
-    <footer>&copy; 2025 <a href="https://blakerayvid.com">Blake Rayvid</a>. All rights reserved.</footer>
+    <footer>&copy; 2025 <a href="https://blakerayvid.com">Blake Rayvid</a>. All rights reserved. Data from <a href="https://pypi.org/project/yfinance/">Yahoo Finance</a>.</footer>
+
+    <!-- Help Modal Overlay -->
+    <div id="info-modal" class="modal-overlay">
+        <div class="modal-box">
+            <span class="close-btn">&times;</span>
+            <h3 class="modal-title">Formatting Rules</h3>
+            
+            <div class="modal-section">
+                <h4>Single Assets</h4>
+                <p>Enter comma-separated tickers.<br>Example: <code>AAPL, BTC, GLD</code></p>
+            </div>
+
+            <div class="modal-section">
+                <h4>Equal-Weighted Portfolios (Quarterly Rebalance)</h4>
+                <p>Wrap tickers in parentheses.<br>Example: <code>(AMZN, AAPL, GOOGL)</code></p>
+            </div>
+
+            <div class="modal-section">
+                <h4>Custom Weighted Portfolios (Quarterly Rebalance)</h4>
+                <p>Use multipliers inside parentheses. Must sum to 1.0.<br>Example: <code>(0.6*SPY, 0.4*TLT)</code></p>
+            </div>
+
+            <div class="modal-section">
+                <h4>Buy & Hold / Basket of Shares (No Rebalance)</h4>
+                <p>Use math operators (+) without parentheses.<br>Example: <code>0.5*AAPL + 0.5*MSFT</code></p>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js" defer></script>
     <script>
     document.addEventListener('DOMContentLoaded', function () {
         const mainForm = document.querySelector('.content-form');
+        
+        // --- Modal Logic ---
+        const modal = document.getElementById('info-modal');
+        const btn = document.getElementById('info-trigger');
+        const closeSpan = document.querySelector('.close-btn');
+
+        if(modal && btn && closeSpan) {
+            btn.onclick = function() {
+                modal.style.display = "block";
+            }
+            closeSpan.onclick = function() {
+                modal.style.display = "none";
+            }
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+            }
+        }
+
         if (!mainForm) return;
 
         const logScaleToggle = document.getElementById('log_scale');
