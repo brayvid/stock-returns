@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css">
-    <title>Stock Performance | Blake Rayvid</title>
+    <title>Compare Stock Returns | Blake Rayvid</title>
     <meta name="description" content="Compare multiple stock and portfolio performance with real-time data and interactive charts.">
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
 
@@ -84,6 +84,18 @@
         .smoothing-control label { display: block; }
         #smoothing-slider { margin-top: 8px; }        
 
+        /* --- Disable click-jump on smoothing slider --- */
+        #smoothing-slider .noUi-base {
+            pointer-events: none; 
+        }
+        #smoothing-slider .noUi-handle {
+            pointer-events: auto; 
+            cursor: grab;
+        }
+        #smoothing-slider .noUi-handle:active {
+            cursor: grabbing;
+        }
+
         /* --- Info Icon & Modal Styles --- */
         .info-icon {
             color: #0d66c5;
@@ -92,6 +104,7 @@
             font-size: 1.1em;
             vertical-align: middle;
             user-select: none;
+            display: inline-block; /* Helps with click targeting */
         }
         .info-icon:hover { color: #0a58ca; }
 
@@ -246,7 +259,7 @@
             </div>
         </form>
     </div>
-    <footer>&copy; 2025 <a href="https://blakerayvid.com">Blake Rayvid</a>. All rights reserved. Data from <a href="https://pypi.org/project/yfinance/">Yahoo Finance</a>.</footer>
+    <footer>&copy; 2025 <a href="https://blakerayvid.com">Blake Rayvid</a>. All rights reserved.</footer>
 
     <!-- Help Modal Overlay -->
     <div id="info-modal" class="modal-overlay">
@@ -256,7 +269,7 @@
             
             <div class="modal-section">
                 <h4>Single Assets</h4>
-                <p>Enter comma-separated tickers.<br>Example: <code>AAPL, BTC, GLD</code></p>
+                <p>Enter comma-separated tickers.<br>Example: <code>AAPL, BTC-USD, GC=F</code></p>
             </div>
 
             <div class="modal-section">
@@ -287,7 +300,10 @@
         const closeSpan = document.querySelector('.close-btn');
 
         if(modal && btn && closeSpan) {
-            btn.onclick = function() {
+            // UPDATED: preventDefault() stops the label from stealing focus
+            btn.onclick = function(e) {
+                e.preventDefault(); 
+                e.stopPropagation();
                 modal.style.display = "block";
             }
             closeSpan.onclick = function() {
