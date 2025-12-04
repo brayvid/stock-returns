@@ -377,7 +377,7 @@ def index():
     default_end_dt = datetime.today()
     
     # --- UPDATED DEFAULT ENTRY ---
-    symbols_req = request.args.get("symbols", "(0.6*SPY, 0.4*TLT), (AAPL, MSFT, NVDA), GLD")
+    symbols_req = request.args.get("symbols", "(GOOG,AMZN,AAPL,META,MSFT,NVDA,TSLA), (0.6*SPY, 0.4*TLT), GLD")
     
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
@@ -437,7 +437,7 @@ def plot_png():
     default_end_dt = datetime.today()
     
     # --- UPDATED DEFAULT ENTRY ---
-    symbols_req = request.args.get("symbols", "(0.6*SPY, 0.4*TLT), (AAPL, MSFT, NVDA), GLD")
+    symbols_req = request.args.get("symbols", "(GOOG,AMZN,AAPL,META,MSFT,NVDA,TSLA), (0.6*SPY, 0.4*TLT), GLD")
     
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
