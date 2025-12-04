@@ -82,88 +82,82 @@ def parse_single_combination_expression(expression_str_input):
     expression_str = expression_str_input.strip().upper()
     if not expression_str: return None, None, None, None
     
-    # --- 1. Rebalanced Portfolio Syntax: (A, B, C) ---
+    # --- 1. Rebalanced Portfolio Syntax: (A, B, C), (0.5*A, B), etc. ---
     if expression_str.startswith('(') and expression_str.endswith(')'):
         inner_content = expression_str[1:-1]
-        raw_parts = [p.strip() for p in inner_content.split(',')]
-        components = []
+        if not inner_content.strip():
+            return None, None, None, f"Empty portfolio definition in '{expression_str}'"
+
+        raw_parts = [p.strip() for p in inner_content.split(',') if p.strip()]
+        
+        weighted_components_temp = []
+        unweighted_tickers_temp = []
         underlying_tickers = set()
-        
-        is_explicit_weight = '*' in raw_parts[0]
-        running_weight = 0.0
-        
+        total_defined_weight = 0.0
+
         for part in raw_parts:
-            w, t = parse_portfolio_component(part)
-            if not t: return None, None, None, f"Invalid format in '{expression_str}'"
+            weight, ticker = parse_portfolio_component(part)
+            if not ticker:
+                return None, None, None, f"Invalid format in component '{part}' of '{expression_str}'"
             
-            final_weight = 0.0
-            if is_explicit_weight:
-                if w is None: 
-                    return None, None, None, f"Format mismatch in '{expression_str}': cannot mix weighted and unweighted items."
-                final_weight = w
+            underlying_tickers.add(ticker)
+            
+            if weight is not None:
+                if not (0 < weight < 1):
+                     return None, None, None, f"In '{expression_str}', explicit weight for '{ticker}' must be between 0 and 1 (exclusive), but got {weight}."
+                total_defined_weight += weight
+                weighted_components_temp.append((weight, ticker))
             else:
-                final_weight = 1.0 
+                unweighted_tickers_temp.append(ticker)
+        
+        if not weighted_components_temp and not unweighted_tickers_temp:
+            return None, None, None, f"No tickers found in '{expression_str}'"
             
-            running_weight += final_weight
-            components.append((final_weight, t))
-            underlying_tickers.add(t)
-        
-        # Strict Sum Validation for Rebalanced Portfolios
-        if is_explicit_weight:
-            if abs(running_weight - 1.0) > 0.001:
-                return None, None, None, f"Weights in '{expression_str}' sum to {running_weight:.2f}. They must add up to 1.0 (100%)."
-        else:
-            if components:
-                count = len(components)
-                components = [(1.0/count, t) for _, t in components]
+        final_components = []
 
-        return components, list(underlying_tickers), "rebalanced", None
-
-    # --- 2. Linear Combination (Basket of Shares) ---
-    
-    expression_for_parsing = expression_str
-    # Prepend + if implied
-    if not (expression_str.startswith("+") or expression_str.startswith("-")):
-        expression_for_parsing = "+" + expression_str
-        
-    TICKER_REGEX = r"[A-Z0-9\.\-\^\=]+" 
-    # Regex captures: (Sign), (Coefficient), (Ticker)
-    term_pattern = re.compile(rf"([+\-])\s*(\d*\.?\d*)?\s*\*?\s*({TICKER_REGEX})")
-    
-    components = []
-    underlying_tickers = set()
-    last_match_end = 0
-    
-    for match in term_pattern.finditer(expression_for_parsing):
-        # Check for garbage between matches
-        if expression_for_parsing[last_match_end:match.start()].strip(): 
-            return None, None, None, f"Syntax error in '{expression_str}'"
+        # Case 1: Mixed weighted and unweighted components (new logic).
+        if weighted_components_temp and unweighted_tickers_temp:
+            if total_defined_weight >= 1.0:
+                return None, None, None, f"Sum of defined weights in '{expression_str}' is {total_defined_weight:.2f}, leaving no room for unweighted tickers."
+            remaining_weight = 1.0 - total_defined_weight
+            weight_per_unweighted = remaining_weight / len(unweighted_tickers_temp)
             
-        sign_str, coeff_str, ticker_str = match.groups()
-        ticker_str = ticker_str.strip()
+            final_components.extend(weighted_components_temp)
+            for ticker in unweighted_tickers_temp:
+                final_components.append((weight_per_unweighted, ticker))
         
-        if not ticker_str: return None, None, None, f"Missing ticker in '{expression_str}'"
+        # Case 2: All components have explicit weights.
+        elif weighted_components_temp:
+            if abs(total_defined_weight - 1.0) > 0.001:
+                return None, None, None, f"Fully weighted portfolio '{expression_str}' must sum to 1.0, but sums to {total_defined_weight:.2f}."
+            final_components = weighted_components_temp
         
-        # --- SUBTRACTION CHECK ---
-        if sign_str == "-":
-            return None, None, None, f"Subtraction/Shorting is not allowed: '{expression_str}'. Use positive weights only."
+        # Case 3: All components are unweighted. Classic equal split.
+        elif unweighted_tickers_temp:
+            equal_weight = 1.0 / len(unweighted_tickers_temp)
+            for ticker in unweighted_tickers_temp:
+                final_components.append((equal_weight, ticker))
 
-        try: 
-            coeff = float(coeff_str) if coeff_str and coeff_str.strip() else 1.0
-        except ValueError: 
-            return None, None, None, f"Invalid number '{coeff_str}'"
+        return final_components, list(underlying_tickers), "rebalanced", None
 
-        components.append((coeff, ticker_str))
-        underlying_tickers.add(ticker_str)
-        last_match_end = match.end()
+    # --- 2. Basket of shares (using + or -) - NOW DISALLOWED ---
+    if '+' in expression_str or '-' in expression_str:
+        return None, None, None, f"Basket of shares syntax (e.g., 'A + B') is no longer supported. Use portfolio syntax (A, B) for combinations."
+
+    # --- 3. Simple Ticker (e.g., 'GOOG') or Scaled Ticker (e.g., '0.5*GOOG') ---
+    weight, ticker = parse_portfolio_component(expression_str)
     
-    if last_match_end != len(expression_for_parsing): 
-        return None, None, None, f"Syntax error at end of '{expression_str}'"
+    if not ticker:
+        return None, None, None, f"Invalid format for '{expression_str}'"
     
-    is_simple_ticker = len(components) == 1 and components[0][0] == 1.0 and expression_str == components[0][1]
-    strategy_type = 'simple' if is_simple_ticker else 'linear'
+    # Simple Ticker like 'GOOG'
+    if weight is None:
+        return [(1.0, ticker)], [ticker], 'simple', None
     
-    return components, list(underlying_tickers), strategy_type, None
+    # Scaled Ticker like '0.5*GOOG'. We'll use the 'linear' path for this.
+    else:
+        return [(weight, ticker)], [ticker], 'linear', None
+
 
 def parse_symbols_input(symbols_input_str):
     parsed_symbols_list, all_underlying_tickers_set, parsing_errors, combination_legend = [], set(), [], {}
@@ -192,9 +186,35 @@ def parse_symbols_input(symbols_input_str):
         if strategy_type == 'simple':
             parsed_symbols_list.append({"name": expr_str.upper(), "type": "simple"})
         else:
-            # Handle both 'linear' and 'rebalanced' with a legend code
             generated_code = generate_code_for_combination(expr_str.upper())
-            combination_legend[generated_code] = expr_str.upper()
+            
+            # --- MODIFIED: Build legend string based on user input style ---
+            is_purely_unweighted_portfolio = (
+                strategy_type == 'rebalanced' and 
+                '*' not in expr_str 
+            )
+
+            if is_purely_unweighted_portfolio:
+                # For inputs like (A, B, C), use the original string for a cleaner look.
+                combination_legend[generated_code] = expr_str.upper()
+            else:
+                # For mixed/fully weighted portfolios, show all final calculated weights.
+                component_strings = []
+                sorted_components = sorted(components, key=lambda x: x[1]) # Sort by ticker for consistency
+                for weight, ticker in sorted_components:
+                    # Use enough precision for clarity without being excessive
+                    weight_str = f"{weight:.4g}"
+                    component_strings.append(f"{weight_str}*{ticker}")
+                
+                detailed_display_str = ""
+                if strategy_type == 'rebalanced':
+                    detailed_display_str = f"({', '.join(component_strings)})"
+                elif strategy_type == 'linear' and component_strings:
+                    detailed_display_str = component_strings[0]
+                
+                combination_legend[generated_code] = detailed_display_str if detailed_display_str else expr_str.upper()
+            # --- END MODIFIED LOGIC ---
+
             parsed_symbols_list.append({
                 "name": generated_code, 
                 "type": strategy_type,
@@ -286,7 +306,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
             if name in underlying_df.columns:
                 final_series_for_display[name] = underlying_df[name]
 
-        # --- 2. Linear Combination (Basket of Shares) ---
+        # --- 2. Scaled Ticker ---
         elif item["type"] == "linear":
             components = item["components"]
             component_series_list, is_calculable = [], True
@@ -295,7 +315,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
                     # Simple math: Quantity * Price
                     component_series_list.append(underlying_df[ticker] * coeff)
                 else:
-                    all_messages.append(f"Cannot calculate '{combo_legend[name]}': missing '{ticker}'.")
+                    all_messages.append(f"Cannot calculate '{combo_legend.get(name, name)}': missing '{ticker}'.")
                     is_calculable = False; break
             if is_calculable and component_series_list:
                 final_series_for_display[name] = pd.concat(component_series_list, axis=1).sum(axis=1, min_count=1)
@@ -308,7 +328,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
             is_calculable = True
             for ticker in portfolio_tickers:
                 if ticker not in underlying_df.columns or underlying_df[ticker].empty:
-                    all_messages.append(f"Cannot rebalance '{combo_legend[name]}': missing '{ticker}'.")
+                    all_messages.append(f"Cannot rebalance '{combo_legend.get(name, name)}': missing '{ticker}'.")
                     is_calculable = False; break
             if not is_calculable: continue
 

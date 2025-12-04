@@ -274,17 +274,16 @@
 
             <div class="modal-section">
                 <h4>Equal-Weighted Portfolios (Quarterly Rebalance)</h4>
-                <p>Wrap tickers in parentheses.<br>Example: <code>(AMZN, AAPL, GOOGL)</code></p>
+                <p>Wrap tickers in parentheses to create an equal-weighted portfolio.<br>Example: <code>(AMZN, AAPL, GOOGL)</code></p>
             </div>
 
             <div class="modal-section">
                 <h4>Custom Weighted Portfolios (Quarterly Rebalance)</h4>
-                <p>Use multipliers inside parentheses. Must sum to 1.0.<br>Example: <code>(0.6*SPY, 0.4*TLT)</code></p>
-            </div>
-
-            <div class="modal-section">
-                <h4>Buy & Hold / Basket of Shares (No Rebalance)</h4>
-                <p>Use math operators (+) without parentheses.<br>Example: <code>0.5*AAPL + 0.5*MSFT</code></p>
+                <p>Use multipliers like <code>0.6*TICKER</code> inside parentheses. If weights don't add up to 1.0, any unweighted tickers will evenly split the remainder.</p>
+                <p>
+                    <strong>Fully-weighted example:</strong> <code>(0.6*SPY, 0.4*TLT)</code><br>
+                    <strong>Partially-weighted example:</strong> <code>(0.5*VTI, VOO, QQQ)</code>
+                </p>
             </div>
         </div>
     </div>
