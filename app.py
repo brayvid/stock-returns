@@ -525,7 +525,8 @@ def plot_png():
         plot_data = plot_data.rolling(window=smoothing_req, min_periods=1).mean()
 
     # Plot
-    fig, ax = plt.subplots(figsize=(12, 7))
+    # Reduced size (10x6) and using constrained_layout for better fit
+    fig, ax = plt.subplots(figsize=(10, 6), layout='constrained')
 
     last_values = plot_data.ffill().iloc[-1].sort_values(ascending=False)
     cmap = plt.get_cmap('tab10')
@@ -637,14 +638,16 @@ def plot_png():
     if log_scale_req and 'dynamic_ticks' in locals() and dynamic_ticks: ax_right.yaxis.set_major_locator(FixedLocator(dynamic_ticks))
     ax_right.yaxis.set_minor_locator(NullLocator()); ax_right.yaxis.set_major_formatter(percent_formatter)
     
-    fig.tight_layout(pad=1.0) 
+    # Removed tight_layout (handled by layout='constrained' in subplots)
     output = io.BytesIO()
-    plt.savefig(output, format='png', dpi=110)
+    # Reduced DPI from 110 to 85 (Major file size reduction)
+    plt.savefig(output, format='png', dpi=85)
     plt.close(fig)
     output.seek(0)
 
     response = Response(output.getvalue(), mimetype='image/png')
-    response.headers['Cache-Control'] = 'public, max-age=600'
+    # Increased to 3600 (1 hour) to satisfy PSI cache policy
+    response.headers['Cache-Control'] = 'public, max-age=3600'
     
     return response
     

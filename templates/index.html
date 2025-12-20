@@ -67,7 +67,7 @@
             border-radius: 4px;
             margin-top: 10px;
             display: block;
-            aspect-ratio: 1080 / 630;
+            aspect-ratio: 10 / 6;
         }
         .messages-container { margin-top: 15px; max-height: 150px; overflow-y: auto; border: 1px solid #eee; padding:10px; background: #f9f9f9; border-radius: 4px; font-size: 0.85em; }
         .message { padding: 8px; margin-bottom:8px; border-radius: 4px; }
@@ -251,7 +251,12 @@
                 {% endif %}
                 {% if plot_url %}
                     <div class="plot-container">
-                        <img src="{{ plot_url }}" alt="Stock Returns Plot">
+                        <img src="{{ plot_url }}" 
+                            alt="Stock Returns Plot" 
+                            width="850" 
+                            height="510" 
+                            fetchpriority="high" 
+                            loading="eager">
                     </div>
                 {% elif request.args and not error %} 
                      <div class="message warning" style="margin-top:15px;">No plot generated. Check parameters.</div>
