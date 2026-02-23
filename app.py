@@ -397,7 +397,7 @@ def index():
     default_end_dt = datetime.today()
     
     # --- UPDATED DEFAULT ENTRY ---
-    symbols_req = request.args.get("symbols", "(GOOG,AMZN,AAPL,META,MSFT,NVDA,TSLA), (0.6*SPY, 0.4*TLT), GLD")
+    symbols_req = request.args.get("symbols", "MAGS, VXUS, GLD")
     
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
@@ -457,7 +457,7 @@ def plot_png():
     default_end_dt = datetime.today()
     
     # --- UPDATED DEFAULT ENTRY ---
-    symbols_req = request.args.get("symbols", "(GOOG,AMZN,AAPL,META,MSFT,NVDA,TSLA), (0.6*SPY, 0.4*TLT), GLD")
+    symbols_req = request.args.get("symbols", "MAGS, VXUS, GLD")
     
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
@@ -486,30 +486,38 @@ def plot_png():
 
     if plot_data.empty or len(plot_data) < 2: return Response(status=404)
 
-    # Calculate Beta and Alpha
+    # --- MODIFIED: Calculate Beta, Alpha, and Historical Volatility ---
     metrics = {}
     daily_returns = plot_data.pct_change()
     has_benchmark = benchmark_req and benchmark_req in daily_returns.columns and daily_returns[benchmark_req].dropna().count() > 1
-    
+
+    benchmark_returns = None
+    benchmark_variance = None
     if has_benchmark:
         benchmark_returns = daily_returns[benchmark_req].dropna()
         benchmark_variance = benchmark_returns.var()
 
-        for name in plot_data.columns:
-            if name == benchmark_req: continue
-            
-            asset_returns = daily_returns[name].dropna()
+    for name in plot_data.columns:
+        asset_returns = daily_returns[name].dropna()
+        
+        # Calculate HV (Historical Volatility)
+        hv = None
+        if len(asset_returns) >= 2:
+            hv = asset_returns.std() * math.sqrt(252)
+        
+        # Calculate Beta and Alpha (if benchmark exists)
+        beta, alpha = None, None
+        if has_benchmark and name != benchmark_req:
             common_returns = pd.DataFrame({'asset': asset_returns, 'benchmark': benchmark_returns}).dropna()
-            
-            beta, alpha = None, None
             if len(common_returns) >= 2 and benchmark_variance is not None and benchmark_variance > 0:
                 covariance = common_returns['asset'].cov(common_returns['benchmark'])
                 beta = covariance / benchmark_variance
                 daily_alphas = common_returns['asset'] - (beta * common_returns['benchmark'])
                 alpha = daily_alphas.mean() * 252
-            
-            metrics[name] = {'beta': beta, 'alpha': alpha}
+        
+        metrics[name] = {'beta': beta, 'alpha': alpha, 'hv': hv}
     del daily_returns
+    # --- END MODIFICATION ---
 
     # Normalize
     first_valid_indices = plot_data.apply(lambda col: col.first_valid_index())
@@ -566,19 +574,23 @@ def plot_png():
                 return_str = f" {pct_change:+.0f}%"
             base_label += return_str
 
+        # --- MODIFIED: Add HV to the legend string ---
         metrics_in_parens = []
         if name in metrics:
             m = metrics.get(name, {})
-            beta_val, alpha_val = m.get('beta'), m.get('alpha')
+            beta_val, alpha_val, hv_val = m.get('beta'), m.get('alpha'), m.get('hv')
             if beta_val is not None:
                 metrics_in_parens.append(f"Beta: {beta_val:.2f}")
             if alpha_val is not None:
                 if -0.005 < alpha_val < 0: alpha_val = 0.0 
                 metrics_in_parens.append(f"Alpha: {alpha_val:.2f}")
+            if hv_val is not None:
+                metrics_in_parens.append(f"Vol: {hv_val*100:.1f}%")
         
         final_label = base_label
         if metrics_in_parens:
             final_label += f" ({', '.join(metrics_in_parens)})"
+        # --- END MODIFICATION ---
         
         line_color = color_map.get(name, 'grey')
         linestyle = "--" if name == benchmark_req else "-"
