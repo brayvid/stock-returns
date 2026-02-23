@@ -574,7 +574,7 @@ def plot_png():
                 return_str = f" {pct_change:+.0f}%"
             base_label += return_str
 
-        # --- MODIFIED: Add HV to the legend string ---
+        # --- MODIFIED: Display Vol as a decimal ---
         metrics_in_parens = []
         if name in metrics:
             m = metrics.get(name, {})
@@ -585,7 +585,7 @@ def plot_png():
                 if -0.005 < alpha_val < 0: alpha_val = 0.0 
                 metrics_in_parens.append(f"Alpha: {alpha_val:.2f}")
             if hv_val is not None:
-                metrics_in_parens.append(f"Vol: {hv_val*100:.1f}%")
+                metrics_in_parens.append(f"Vol: {hv_val:.2f}") # Changed format
         
         final_label = base_label
         if metrics_in_parens:
