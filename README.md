@@ -88,7 +88,9 @@ stock-returns/
 
 5.  **Fine-tune & Adjust:** Use the sliders and checkbox to adjust the plotted date range, apply smoothing, or switch to a log scale. The plot will update automatically.
 
----
-<br>
 
+## Example
 ![](images/example.png)
+
+---
+<p align="center">&copy; Copyright 2026 <a href="https://blakerayvid.com">Blake Rayvid</a>. All rights reserved.</p>
