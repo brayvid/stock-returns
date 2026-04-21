@@ -397,7 +397,7 @@ def index():
     default_end_dt = datetime.today()
     
     # --- UPDATED DEFAULT ENTRY ---
-    symbols_req = request.args.get("symbols", "MAGS, VXUS, GLD")
+    symbols_req = request.args.get("symbols", "SOXX, MAGS, VXUS, GLD")
     
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
@@ -457,7 +457,7 @@ def plot_png():
     default_end_dt = datetime.today()
     
     # --- UPDATED DEFAULT ENTRY ---
-    symbols_req = request.args.get("symbols", "MAGS, VXUS, GLD")
+    symbols_req = request.args.get("symbols", "SOXX, MAGS, VXUS, GLD")
     
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
