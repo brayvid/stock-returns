@@ -90,7 +90,7 @@ stock-returns/
 
 
 ## Example
-![](images/example.png)
+![](images/example2.png)
 
 ---
 <p align="center">&copy; Copyright 2026 <a href="https://blakerayvid.com">Blake Rayvid</a>. All rights reserved.</p>
