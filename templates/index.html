@@ -161,6 +161,9 @@
             word-break: break-word;
         }
 
+        /* Helper class for dynamic risk-free inputs display */
+        .rf-hidden { display: none !important; }
+
         @keyframes fadeIn {
             from {opacity: 0;}
             to {opacity: 1;}
@@ -215,6 +218,19 @@
                             Logarithmic Scale
                         </label>
                     </div>
+
+                    <!-- Dynamic High Yield Savings simulation input section -->
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="rf_enabled" name="rf_enabled" value="true" {% if inputs.rf_enabled %}checked{% endif %}>
+                            Include High Yield Savings
+                        </label>
+                        <div id="rf-rate-container" {% if not inputs.rf_enabled %}class="rf-hidden"{% endif %} style="display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap;">
+                            <input type="text" id="rf_rate" name="rf_rate" value="{{ inputs.rf_rate }}" placeholder="4.5" style="width: 50px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; text-align: center;">
+                            <span style="font-size: 0.9em; font-weight: bold; color: #444;">% APY</span>
+                        </div>
+                    </div>
+
                     <div class="smoothing-control">
                         <label>Smoothing (Days): <b id="smoothing-readout">{{ inputs.smoothing_window }}</b></label>
                         <div id="smoothing-slider" data-start="{{ inputs.smoothing_window }}"></div>
@@ -293,6 +309,11 @@
                     <strong>Partially-weighted example:</strong> <code>(0.5*VTI, VOO, QQQ)</code>
                 </p>
             </div>
+
+            <div class="modal-section">
+                <h4>High Yield Savings Account Simulation</h4>
+                <p>To plot a baseline savings yield with daily compounding, check the <strong>Include High Yield Savings</strong> checkbox and set your target annual yield directly on the control panel.</p>
+            </div>
         </div>
     </div>
 
@@ -307,7 +328,6 @@
         const closeSpan = document.querySelector('.close-btn');
 
         if(modal && btn && closeSpan) {
-            // UPDATED: preventDefault() stops the label from stealing focus
             btn.onclick = function(e) {
                 e.preventDefault(); 
                 e.stopPropagation();
@@ -329,6 +349,34 @@
         if (logScaleToggle) {
             logScaleToggle.addEventListener('change', function() {
                 mainForm.submit();
+            });
+        }
+
+        // --- High Yield Savings Baseline Inputs Control ---
+        const rfEnabledToggle = document.getElementById('rf_enabled');
+        const rfRateContainer = document.getElementById('rf-rate-container');
+        const rfRateInput = document.getElementById('rf_rate');
+
+        if (rfEnabledToggle && rfRateContainer) {
+            rfEnabledToggle.addEventListener('change', function() {
+                if (rfEnabledToggle.checked) {
+                    rfRateContainer.classList.remove('rf-hidden');
+                } else {
+                    rfRateContainer.classList.add('rf-hidden');
+                }
+                mainForm.submit();
+            });
+        }
+
+        if (rfRateInput) {
+            rfRateInput.addEventListener('change', function() {
+                mainForm.submit();
+            });
+            rfRateInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    mainForm.submit();
+                }
             });
         }
         

@@ -31,6 +31,10 @@ app.config['CACHE_TYPE'] = 'SimpleCache'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 3600
 cache = Cache(app)
 
+# --- Helper to identify simulated High Yield Savings rate inputs ---
+def is_simulated_ticker(ticker_str):
+    return bool(re.match(r'^-?\d+(\.\d+)?%$', ticker_str))
+
 # --- Plotting & Parsing Helpers ---
 def percent_gain_formatter(x, _):
     try:
@@ -141,8 +145,21 @@ def parse_single_combination_expression(expression_str_input):
         return final_components, list(underlying_tickers), "rebalanced", None
 
     # --- 2. Basket of shares (using + or -) - NOW DISALLOWED ---
-    if '+' in expression_str or '-' in expression_str:
-        return None, None, None, f"Basket of shares syntax (e.g., 'A + B') is no longer supported. Use portfolio syntax (A, B) for combinations."
+    if '+' in expression_str:
+        return None, None, None, "Basket of shares syntax (e.g., 'A + B') is no longer supported. Use portfolio syntax (A, B) for combinations."
+    
+    if '-' in expression_str:
+        temp_weight, temp_ticker = parse_portfolio_component(expression_str)
+        
+        # Intercept negative interest rates and return a specific validation error
+        if temp_ticker and is_simulated_ticker(temp_ticker) and temp_ticker.startswith('-'):
+            return None, None, None, "Negative High Yield Savings rates are not allowed."
+            
+        is_valid_ticker = False
+        if temp_ticker:
+            is_valid_ticker = bool(re.match(r'^[A-Z0-9\.=\-\^]+$', temp_ticker))
+        if not is_valid_ticker:
+            return None, None, None, "Basket of shares syntax (e.g., 'A - B') is no longer supported. Use portfolio syntax (A, B) for combinations."
 
     # --- 3. Simple Ticker (e.g., 'GOOG') or Scaled Ticker (e.g., '0.5*GOOG') ---
     weight, ticker = parse_portfolio_component(expression_str)
@@ -188,21 +205,17 @@ def parse_symbols_input(symbols_input_str):
         else:
             generated_code = generate_code_for_combination(expr_str.upper())
             
-            # --- MODIFIED: Build legend string based on user input style ---
             is_purely_unweighted_portfolio = (
                 strategy_type == 'rebalanced' and 
                 '*' not in expr_str 
             )
 
             if is_purely_unweighted_portfolio:
-                # For inputs like (A, B, C), use the original string for a cleaner look.
                 combination_legend[generated_code] = expr_str.upper()
             else:
-                # For mixed/fully weighted portfolios, show all final calculated weights.
                 component_strings = []
-                sorted_components = sorted(components, key=lambda x: x[1]) # Sort by ticker for consistency
+                sorted_components = sorted(components, key=lambda x: x[1])
                 for weight, ticker in sorted_components:
-                    # Use enough precision for clarity without being excessive
                     weight_str = f"{weight:.4g}"
                     component_strings.append(f"{weight_str}*{ticker}")
                 
@@ -213,7 +226,6 @@ def parse_symbols_input(symbols_input_str):
                     detailed_display_str = component_strings[0]
                 
                 combination_legend[generated_code] = detailed_display_str if detailed_display_str else expr_str.upper()
-            # --- END MODIFIED LOGIC ---
 
             parsed_symbols_list.append({
                 "name": generated_code, 
@@ -274,9 +286,16 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
     if not parsed_symbols and parse_errors:
         return pd.DataFrame(), combo_legend, parse_errors
 
-    all_tickers_to_download = set(underlying_tickers)
-    if benchmark_req: all_tickers_to_download.add(benchmark_req)
-    if not all_tickers_to_download: return pd.DataFrame(), combo_legend, parse_errors + ["No valid symbols."]
+    # Separate real tickers from simulated ones
+    real_tickers = [t for t in underlying_tickers if not is_simulated_ticker(t)]
+    simulated_tickers = [t for t in underlying_tickers if is_simulated_ticker(t)]
+
+    all_tickers_to_download = set(real_tickers)
+    if benchmark_req and not is_simulated_ticker(benchmark_req): 
+        all_tickers_to_download.add(benchmark_req)
+        
+    if not all_tickers_to_download:
+        all_tickers_to_download.add("SPY")
 
     try:
         end_date_dt_for_yf = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
@@ -296,6 +315,17 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
         underlying_df = underlying_df.reindex(trading_days_index)
         underlying_df.ffill(inplace=True)
 
+    # Calculate and inject compounding savings account parameters
+    if not underlying_df.empty:
+        for ticker in simulated_tickers:
+            try:
+                rate_val = float(ticker.replace('%', '')) / 100.0
+                start_date = underlying_df.index[0]
+                elapsed_days = (underlying_df.index - start_date).days
+                underlying_df[ticker] = ((1.0 + rate_val / 365.0) ** elapsed_days).astype('float32')
+            except Exception as e:
+                all_messages.append(f"Failed to include High Yield Savings rate for '{ticker}': {str(e)}")
+
     final_series_for_display = {}
     
     for item in parsed_symbols:
@@ -312,7 +342,6 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
             component_series_list, is_calculable = [], True
             for coeff, ticker in components:
                 if ticker in underlying_df.columns and not underlying_df[ticker].empty:
-                    # Simple math: Quantity * Price
                     component_series_list.append(underlying_df[ticker] * coeff)
                 else:
                     all_messages.append(f"Cannot calculate '{combo_legend.get(name, name)}': missing '{ticker}'.")
@@ -396,7 +425,6 @@ def index():
         
     default_end_dt = datetime.today()
     
-    # --- UPDATED DEFAULT ENTRY ---
     symbols_req = request.args.get("symbols", "SOXX, MAGS, VXUS, GLD")
     
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
@@ -404,10 +432,21 @@ def index():
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
     smoothing_req = int(request.args.get("smoothing_window", 1))
+    
+    # Check if request.args is completely empty (first load)
+    if not request.args:
+        rf_enabled_req = False
+    else:
+        rf_enabled_req = request.args.get("rf_enabled", "false").lower() == "true"
+        
+    rf_rate_req = request.args.get("rf_rate", "4.5").strip()
+    
     template_inputs = {
         "symbols": symbols_req, "benchmark": benchmark_req, "start_date": start_date_req,
-        "end_date": end_date_req, "log_scale": log_scale_req, "smoothing_window": smoothing_req
+        "end_date": end_date_req, "log_scale": log_scale_req, "smoothing_window": smoothing_req,
+        "rf_enabled": rf_enabled_req, "rf_rate": rf_rate_req
     }
+    
     error_message = None
     try:
         start_date_dt = datetime.strptime(start_date_req, "%Y-%m-%d")
@@ -415,13 +454,23 @@ def index():
         if start_date_dt >= end_date_dt: error_message = "Start date must be before end date."
     except ValueError:
         error_message = "Invalid date format. Please use YYYY-MM-DD."
-    if error_message:
-        return render_template("index.html", error=error_message, inputs=template_inputs, messages=[error_message])
+        
+    # Append the risk-free rate programmatically to the pipeline if checked
+    effective_symbols = symbols_req
+    if rf_enabled_req and rf_rate_req:
+        clean_rate = rf_rate_req.replace('%', '').strip()
+        if clean_rate:
+            if effective_symbols.strip():
+                effective_symbols += f", {clean_rate}%"
+            else:
+                effective_symbols = f"{clean_rate}%"
+
     combined_data, combination_legend, messages = get_processed_data(
-        symbols_req, benchmark_req, start_date_req, end_date_req, smoothing_req
+        effective_symbols, benchmark_req, start_date_req, end_date_req, smoothing_req
     )
     if combined_data.empty:
-        return render_template("index.html", error="No valid data to plot.", inputs=template_inputs, messages=messages, combination_legend=combination_legend)
+        return render_template("index.html", error=error_message, inputs=template_inputs, messages=[])
+        
     min_data_date = combined_data.index.min()
     max_data_date = combined_data.index.max()
     fine_tune_start_req = request.args.get("fine_tune_start")
@@ -432,6 +481,7 @@ def index():
         fine_tune_end_req = max_data_date.strftime("%Y-%m-%d")
     template_inputs["fine_tune_start"] = fine_tune_start_req
     template_inputs["fine_tune_end"] = fine_tune_end_req
+    
     plot_url = f"/plot.png?{request.query_string.decode('utf-8')}"
     return render_template("index.html",
                            plot_url=plot_url,
@@ -456,17 +506,31 @@ def plot_png():
         
     default_end_dt = datetime.today()
     
-    # --- UPDATED DEFAULT ENTRY ---
     symbols_req = request.args.get("symbols", "SOXX, MAGS, VXUS, GLD")
-    
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
     smoothing_req = int(request.args.get("smoothing_window", 1))
 
+    if not request.args:
+        rf_enabled_req = False
+    else:
+        rf_enabled_req = request.args.get("rf_enabled", "false").lower() == "true"
+        
+    rf_rate_req = request.args.get("rf_rate", "4.5").strip()
+
+    effective_symbols = symbols_req
+    if rf_enabled_req and rf_rate_req:
+        clean_rate = rf_rate_req.replace('%', '').strip()
+        if clean_rate:
+            if effective_symbols.strip():
+                effective_symbols += f", {clean_rate}%"
+            else:
+                effective_symbols = f"{clean_rate}%"
+
     combined_data, combination_legend, _ = get_processed_data(
-        symbols_req, benchmark_req, start_date_req, end_date_req
+        effective_symbols, benchmark_req, start_date_req, end_date_req
     )
 
     if combined_data.empty: return Response(status=404)
@@ -486,7 +550,6 @@ def plot_png():
 
     if plot_data.empty or len(plot_data) < 2: return Response(status=404)
 
-    # --- MODIFIED: Calculate Beta, Alpha, and Historical Volatility ---
     metrics = {}
     daily_returns = plot_data.pct_change()
     has_benchmark = benchmark_req and benchmark_req in daily_returns.columns and daily_returns[benchmark_req].dropna().count() > 1
@@ -500,12 +563,10 @@ def plot_png():
     for name in plot_data.columns:
         asset_returns = daily_returns[name].dropna()
         
-        # Calculate HV (Historical Volatility)
         hv = None
         if len(asset_returns) >= 2:
             hv = asset_returns.std() * math.sqrt(252)
         
-        # Calculate Beta and Alpha (if benchmark exists)
         beta, alpha = None, None
         if has_benchmark and name != benchmark_req:
             common_returns = pd.DataFrame({'asset': asset_returns, 'benchmark': benchmark_returns}).dropna()
@@ -517,7 +578,6 @@ def plot_png():
         
         metrics[name] = {'beta': beta, 'alpha': alpha, 'hv': hv}
     del daily_returns
-    # --- END MODIFICATION ---
 
     # Normalize
     first_valid_indices = plot_data.apply(lambda col: col.first_valid_index())
@@ -533,7 +593,6 @@ def plot_png():
         plot_data = plot_data.rolling(window=smoothing_req, min_periods=1).mean()
 
     # Plot
-    # Reduced size (10x6) and using constrained_layout for better fit
     fig, ax = plt.subplots(figsize=(10, 6), layout='constrained')
 
     last_values = plot_data.ffill().iloc[-1].sort_values(ascending=False)
@@ -558,6 +617,9 @@ def plot_png():
     for name in last_values.index:
         display_name = combination_legend.get(name, name)
         
+        # --- Convert "X.XX%" format into "High Yield Savings X.XX% APY" ---
+        display_name = re.sub(r'(-?\b\d+(?:\.\d+)?%)', r'High Yield Savings \1 APY', display_name)
+
         if len(display_name) > MAX_LEGEND_LABEL_LENGTH:
             truncated_name = display_name[:MAX_LEGEND_LABEL_LENGTH - 3] + "..."
         else:
@@ -574,7 +636,6 @@ def plot_png():
                 return_str = f" {pct_change:+.0f}%"
             base_label += return_str
 
-        # --- MODIFIED: Display Vol as a decimal ---
         metrics_in_parens = []
         if name in metrics:
             m = metrics.get(name, {})
@@ -585,12 +646,11 @@ def plot_png():
                 if -0.005 < alpha_val < 0: alpha_val = 0.0 
                 metrics_in_parens.append(f"Alpha: {alpha_val:.2f}")
             if hv_val is not None:
-                metrics_in_parens.append(f"Vol: {hv_val:.2f}") # Changed format
+                metrics_in_parens.append(f"Vol: {hv_val:.2f}")
         
         final_label = base_label
         if metrics_in_parens:
             final_label += f" ({', '.join(metrics_in_parens)})"
-        # --- END MODIFICATION ---
         
         line_color = color_map.get(name, 'grey')
         linestyle = "--" if name == benchmark_req else "-"
@@ -650,15 +710,12 @@ def plot_png():
     if log_scale_req and 'dynamic_ticks' in locals() and dynamic_ticks: ax_right.yaxis.set_major_locator(FixedLocator(dynamic_ticks))
     ax_right.yaxis.set_minor_locator(NullLocator()); ax_right.yaxis.set_major_formatter(percent_formatter)
     
-    # Removed tight_layout (handled by layout='constrained' in subplots)
     output = io.BytesIO()
-    # Reduced DPI from 110 to 85 (Major file size reduction)
     plt.savefig(output, format='png', dpi=85)
     plt.close(fig)
     output.seek(0)
 
     response = Response(output.getvalue(), mimetype='image/png')
-    # Increased to 3600 (1 hour) to satisfy PSI cache policy
     response.headers['Cache-Control'] = 'public, max-age=3600'
     
     return response
