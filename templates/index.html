@@ -376,6 +376,13 @@
     document.addEventListener('DOMContentLoaded', function () {
         const mainForm = document.querySelector('.content-form');
         
+        // Restore scroll position instantly on DOM load to prevent visual flicker
+        const savedScroll = sessionStorage.getItem('scrollPosition');
+        if (savedScroll !== null) {
+            window.scrollTo(0, parseFloat(savedScroll));
+            sessionStorage.removeItem('scrollPosition');
+        }
+
         // --- Modal Logic ---
         const modal = document.getElementById('info-modal');
         const btn = document.getElementById('info-trigger');
@@ -399,10 +406,21 @@
 
         if (!mainForm) return;
 
+        // Helper to save scroll position before JS-triggered submissions
+        function submitFormWithScroll() {
+            sessionStorage.setItem('scrollPosition', window.scrollY);
+            mainForm.submit();
+        }
+
+        // Save scroll position on manual form submissions (button clicks)
+        mainForm.addEventListener('submit', function() {
+            sessionStorage.setItem('scrollPosition', window.scrollY);
+        });
+
         const logScaleToggle = document.getElementById('log_scale');
         if (logScaleToggle) {
             logScaleToggle.addEventListener('change', function() {
-                mainForm.submit();
+                submitFormWithScroll();
             });
         }
 
@@ -418,18 +436,18 @@
                 } else {
                     rfRateContainer.classList.add('rf-hidden');
                 }
-                mainForm.submit();
+                submitFormWithScroll();
             });
         }
 
         if (rfRateInput) {
             rfRateInput.addEventListener('change', function() {
-                mainForm.submit();
+                submitFormWithScroll();
             });
             rfRateInput.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    mainForm.submit();
+                    submitFormWithScroll();
                 }
             });
         }
@@ -467,7 +485,7 @@
                 smoothingReadout.textContent = value;
             });
 
-            smoothingSliderEl.noUiSlider.on('change', function() { mainForm.submit(); });
+            smoothingSliderEl.noUiSlider.on('change', function() { submitFormWithScroll(); });
         }
         
         const dateSliderEl = document.getElementById('date-slider');
@@ -503,7 +521,7 @@
                 endReadout.textContent = endDate;
             });
 
-            dateSliderEl.noUiSlider.on('change', function () { mainForm.submit(); });
+            dateSliderEl.noUiSlider.on('change', function () { submitFormWithScroll(); });
         }
     });
     </script>
