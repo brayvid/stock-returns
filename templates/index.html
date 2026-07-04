@@ -82,8 +82,31 @@
         .main-page-title { text-align: center; color: #333; margin-bottom: 20px; }
         .main-page-title a { color: inherit; text-decoration: none; }
         .main-page-title a:hover { text-decoration: underline; }
-        .options-group { display: flex; align-items: center; gap: 40px; flex-wrap: wrap; margin-top: 15px; padding-bottom: 10px; }
-        .smoothing-control { flex-grow: 1; max-width: 400px; }
+        .options-group { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; /* Align columns with date inputs */
+            gap: 15px 30px; 
+            margin-top: 15px; 
+            padding-bottom: 10px; 
+            align-items: flex-end;
+        }
+
+        .checkbox-container-col {
+            display: flex;
+            flex-direction: row;
+            gap: 30px;
+            align-items: flex-end;
+        }
+
+        /* Align checkboxes precisely with the horizontal slider track */
+        .options-group .checkbox-container-col > div {
+            margin-bottom: 1px;
+        }
+
+        .smoothing-control { 
+            width: 100%;
+            max-width: none; 
+        }
         .smoothing-control label { display: block; }
         #smoothing-slider { margin-top: 8px; }        
 
@@ -172,17 +195,30 @@
         /* Mobile Widescreen/Landscape & Tablet Viewports */
         @media (max-width: 950px) {
             .options-group { 
+                display: flex;
                 flex-direction: row; 
                 flex-wrap: wrap; 
                 align-items: center; 
                 gap: 15px 20px; 
+            }
+            .checkbox-container-col {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 15px 20px;
+                width: 100%;
+                align-items: center;
+            }
+            /* Reset desktop alignment margins on smaller screens */
+            .options-group .checkbox-container-col > div {
+                margin-bottom: 0;
             }
             .smoothing-control { 
                 width: 100%; 
                 max-width: none; 
                 margin-top: 5px; 
             }
-        }
+        }   
 
         /* Mobile Portrait Viewports */
         @media (max-width: 600px) {
@@ -226,25 +262,29 @@
                 </div>
                 
                 <div class="options-group">
-                    <div>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="log_scale" name="log_scale" value="true" {% if inputs.log_scale %}checked{% endif %}>
-                            Logarithmic Scale
-                        </label>
-                    </div>
+                    <!-- Helper container to group checkboxes under Column 1 -->
+                    <div class="checkbox-container-col">
+                        <div>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="log_scale" name="log_scale" value="true" {% if inputs.log_scale %}checked{% endif %}>
+                                Logarithmic Scale
+                            </label>
+                        </div>
 
-                    <!-- Dynamic High Yield Savings simulation input section -->
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="rf_enabled" name="rf_enabled" value="true" {% if inputs.rf_enabled %}checked{% endif %}>
-                            Include High Yield Savings
-                        </label>
-                        <div id="rf-rate-container" {% if not inputs.rf_enabled %}class="rf-hidden"{% endif %} style="display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap;">
-                            <input type="text" id="rf_rate" name="rf_rate" value="{{ inputs.rf_rate }}" placeholder="4.5" style="width: 50px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; text-align: center;">
-                            <span style="font-size: 0.9em; font-weight: bold; color: #444;">% APY</span>
+                        <!-- Dynamic High Yield Savings simulation input section -->
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="rf_enabled" name="rf_enabled" value="true" {% if inputs.rf_enabled %}checked{% endif %}>
+                                Include High Yield Savings
+                            </label>
+                            <div id="rf-rate-container" {% if not inputs.rf_enabled %}class="rf-hidden"{% endif %} style="display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap;">
+                                <input type="text" id="rf_rate" name="rf_rate" value="{{ inputs.rf_rate }}" placeholder="4.5" style="width: 50px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; text-align: center;">
+                                <span style="font-size: 0.9em; font-weight: bold; color: #444;">% APY</span>
+                            </div>
                         </div>
                     </div>
 
+                    <!-- Smoothing slider sits under Column 2 -->
                     <div class="smoothing-control">
                         <label>Smoothing (Days): <b id="smoothing-readout">{{ inputs.smoothing_window }}</b></label>
                         <div id="smoothing-slider" data-start="{{ inputs.smoothing_window }}"></div>
