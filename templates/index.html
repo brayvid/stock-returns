@@ -479,6 +479,12 @@
                 step: 1
             });
 
+            // --- ACCESSIBILITY FIX ---
+            const handle = smoothingSliderEl.querySelector('.noUi-handle');
+            if (handle) {
+                handle.setAttribute('aria-label', 'Smoothing Window in Days');
+            }
+
             smoothingSliderEl.noUiSlider.on('update', function(values) {
                 const value = Math.round(values[0]);
                 smoothingInput.value = value;
@@ -511,6 +517,15 @@
                 step: 24 * 60 * 60 * 1000,
                 behaviour: 'tap-drag',
             });
+
+            // --- ACCESSIBILITY FIX ---
+            const handles = dateSliderEl.querySelectorAll('.noUi-handle');
+            if (handles[0]) {
+                handles[0].setAttribute('aria-label', 'Fine-tune Start Date');
+            }
+            if (handles[1]) {
+                handles[1].setAttribute('aria-label', 'Fine-tune End Date');
+            }
 
             dateSliderEl.noUiSlider.on('update', function (values) {
                 const startDate = fromTimestamp(parseFloat(values[0]));
