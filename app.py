@@ -319,12 +319,35 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
 
     # Calculate and inject compounding savings account parameters
     if not underlying_df.empty:
+        try:
+            user_start_dt = datetime.strptime(start_str, "%Y-%m-%d")
+            user_end_dt = datetime.strptime(end_str, "%Y-%m-%d")
+            # +1 makes the range calendar-inclusive (e.g., Jan 1 to Dec 31 is exactly 365 days)
+            total_range_days = (user_end_dt - user_start_dt).days + 1
+        except Exception:
+            total_range_days = 365.0
+
+        if total_range_days <= 0:
+            total_range_days = 365.0
+
+        first_trading_date = underlying_df.index[0]
+        last_trading_date = underlying_df.index[-1]
+        total_trading_span_days = (last_trading_date - first_trading_date).days
+        
+        if total_trading_span_days <= 0:
+            total_trading_span_days = 1
+
         for ticker in simulated_tickers:
             try:
                 rate_val = float(ticker.replace('%', '')) / 100.0
-                start_date = underlying_df.index[0]
-                elapsed_days = (underlying_df.index - start_date).days
-                underlying_df[ticker] = ((1.0 + rate_val / 365.0) ** elapsed_days).astype('float32')
+                
+                # Calculate elapsed days relative to the first plotted day
+                elapsed_days = (underlying_df.index - first_trading_date).days
+                
+                # Scale exponent to map the requested calendar span onto the plotted trading index
+                exponent = (elapsed_days / total_trading_span_days) * (total_range_days / 365.0)
+                
+                underlying_df[ticker] = ((1.0 + rate_val) ** exponent).astype('float32')
             except Exception as e:
                 all_messages.append(f"Failed to include High Yield Savings rate for '{ticker}': {str(e)}")
 
