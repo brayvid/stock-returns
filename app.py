@@ -16,6 +16,8 @@ import yfinance as yf
 from flask import Flask, render_template, request, Response
 from flask_caching import Cache
 from flask_compress import Compress
+import html
+import urllib.parse
 
 # --- CONSTANTS - RESOURCE LIMITS ---
 MAX_UNIQUE_TICKERS = 30      
@@ -719,6 +721,30 @@ def plot_png():
     response.headers['Cache-Control'] = 'public, max-age=3600'
     
     return response
+
+@app.route('/robots.txt')
+def serve_robots_txt():
+    return app.send_static_file('robots.txt')
+
+@app.route('/llms.txt')
+def serve_llms_txt():
+    return app.send_static_file('llms.txt')
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    today_str = datetime.today().strftime('%Y-%m-%d')
     
+    xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://stocks.blakerayvid.com/</loc>
+    <lastmod>{today_str}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>"""
+
+    return Response(xml_content, mimetype='application/xml')
+
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

@@ -1,0 +1,7 @@
+# robots.txt for stocks.blakerayvid.com
+User-agent: *
+Allow: /$
+Disallow: /plot.png*
+Disallow: /*?
+
+Sitemap: https://stocks.blakerayvid.com/sitemap.xml

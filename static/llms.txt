@@ -1,0 +1,52 @@
+# Compare Stock Returns
+
+A web-based financial calculation engine that generates normalized cumulative returns charts for custom portfolios, individual tickers, and simulated high-yield savings accounts.
+
+## Key URLs
+
+- **Main Application Interface:** [https://stocks.blakerayvid.com/](https://stocks.blakerayvid.com/) — The interactive web UI containing input controls, presets, date range sliders, and chart visualizations.
+- **Dynamic Chart Generator:** [https://stocks.blakerayvid.com/plot.png](https://stocks.blakerayvid.com/plot.png) — PNG image endpoint that renders and returns Matplotlib charts based on active query parameters.
+- **Dynamic Sitemap:** [https://stocks.blakerayvid.com/sitemap.xml](https://stocks.blakerayvid.com/sitemap.xml) — Machine-readable index pointing to the primary application interface.
+- **Source Code Repository:** [https://github.com/brayvid/stock-returns](https://github.com/brayvid/stock-returns) — Public GitHub repository containing the Flask application logic and front-end template.
+
+## API & Query Parameters
+
+The primary interface and chart generator accept HTTP GET requests with these parameters:
+
+- `symbols` (string): Comma-separated list of tickers or portfolio expressions (details below). Max 20 requested symbols.
+- `benchmark` (string): Reference asset benchmark for alpha/beta/vol calculations. Defaults to `SPY`.
+- `start_date` (string): Format `YYYY-MM-DD`. Start of comparison period.
+- `end_date` (string): Format `YYYY-MM-DD`. End of comparison period.
+- `log_scale` (boolean): Set to `true` to display y-axis logarithmically.
+- `smoothing_window` (integer): Days for rolling average smoothing (range: 1 to 90).
+- `rf_enabled` (boolean): Set to `true` to append a simulated high-yield savings baseline.
+- `rf_rate` (string/float): Target APY for the savings baseline (e.g., `4.5`).
+- `fine_tune_start` (string): Sub-range start date for chart rendering (`YYYY-MM-DD`).
+- `fine_tune_end` (string): Sub-range end date for chart rendering (`YYYY-MM-DD`).
+
+## Expression Formatting Rules
+
+The `symbols` parameter supports three types of structures:
+
+### 1. Simple Tickers
+Standard stock, ETF, commodity, or cryptocurrency symbols.
+*   **Examples:** `AAPL`, `VOO`, `BTC-USD`, `GC=F`
+
+### 2. Quarterly-Rebalanced Portfolios
+Wrapped in parentheses `( )`, components are automatically rebalanced quarterly.
+*   **Equal-Weighted:** Wrap tickers with comma separation.
+    *   *Example:* `(AAPL, MSFT, GOOGL)`
+*   **Explicitly Weighted:** Prepend float weights to tickers (must be between 0.0 and 1.0, exclusive).
+    *   *Fully Weighted Example (sums to 1.0):* `(0.6*VTI, 0.4*TLT)`
+    *   *Partially Weighted Example:* `(0.5*QQQ, VOO, DIA)` 
+        *Note: The remaining 0.5 weight is divided equally among unweighted assets (VOO and DIA get 0.25 each).*
+
+### 3. High Yield Savings Baseline
+Inputs matching `<number>%` (e.g., `4.5%`) simulate daily compounding over the target period.
+
+## System Limits & Validation Rules
+
+- **Unique Ticker Limit:** Up to 30 unique underlying tickers can be processed per request.
+- **Request Symbol Limit:** Up to 20 raw expressions can be requested.
+- **Date Range Limit:** Maximum historical scope is 20 years.
+- **Disallowed Syntax:** Direct addition/subtraction formats like `A + B` or `A - B` are not supported. Use portfolio syntax `(A, B)` instead. Negative interest rates are not allowed.
