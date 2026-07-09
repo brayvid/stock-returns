@@ -240,102 +240,105 @@
 </head>
 <body>
     <div class="page-wrapper">
-        <h1 class="main-page-title"><a href="/">Compare Stock Returns</a></h1>
-        
-        <p style="text-align:center; font-size: 0.9em; margin-top:-15px; margin-bottom: 25px;"><a href="https://github.com/brayvid/stock-returns" target="_blank">View on GitHub</a></p>
+        <header>
+            <h1 class="main-page-title"><a href="/">Compare Stock Returns</a></h1>
+            <p style="text-align:center; font-size: 0.9em; margin-top:-15px; margin-bottom: 25px;"><a href="https://github.com/brayvid/stock-returns" target="_blank">View on GitHub</a></p>
+        </header>
 
-        <form method="GET" action="/" class="content-form">
-            <div class="controls-area">
-                <h2>Chart Controls</h2>
-                
-                <div class="control-group">
-                    <div>
-                        <label for="symbols">Symbols & Portfolio Expressions:<span class="info-icon" id="info-trigger" title="Click for formatting rules">&#9432;</span></label>
-                        <input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}">
-                    </div>
-                    <div><label for="benchmark">Benchmark:</label><input type="text" id="benchmark" name="benchmark" value="{{ inputs.benchmark }}"></div>
-                </div>
-
-                <div class="control-group date-group">
-                    <div><label for="start_date">Start Date:</label><input type="date" id="start_date" name="start_date" value="{{ inputs.start_date }}"></div>
-                    <div><label for="end_date">End Date:</label><input type="date" id="end_date" name="end_date" value="{{ inputs.end_date }}"></div>
-                </div>
-                
-                <div class="options-group">
-                    <!-- Helper container to group checkboxes under Column 1 -->
-                    <div class="checkbox-container-col">
+        <main>
+            <form method="GET" action="/" class="content-form">
+                <div class="controls-area">
+                    <h2>Chart Controls</h2>
+                    
+                    <div class="control-group">
                         <div>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="log_scale" name="log_scale" value="true" {% if inputs.log_scale %}checked{% endif %}>
-                                Logarithmic Scale
-                            </label>
+                            <label for="symbols">Symbols & Portfolio Expressions:<span class="info-icon" id="info-trigger" title="Click for formatting rules">&#9432;</span></label>
+                            <input type="text" id="symbols" name="symbols" value="{{ inputs.symbols }}">
                         </div>
+                        <div><label for="benchmark">Benchmark:</label><input type="text" id="benchmark" name="benchmark" value="{{ inputs.benchmark }}"></div>
+                    </div>
 
-                        <!-- Dynamic High Yield Savings simulation input section -->
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="rf_enabled" name="rf_enabled" value="true" {% if inputs.rf_enabled %}checked{% endif %}>
-                                Include High Yield Savings
-                            </label>
-                            <div id="rf-rate-container" {% if not inputs.rf_enabled %}class="rf-hidden"{% endif %} style="display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap;">
-                                <input type="text" id="rf_rate" name="rf_rate" value="{{ inputs.rf_rate }}" placeholder="4.5" style="width: 50px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; text-align: center;">
-                                <span style="font-size: 0.9em; font-weight: bold; color: #444;">% APY</span>
+                    <div class="control-group date-group">
+                        <div><label for="start_date">Start Date:</label><input type="date" id="start_date" name="start_date" value="{{ inputs.start_date }}"></div>
+                        <div><label for="end_date">End Date:</label><input type="date" id="end_date" name="end_date" value="{{ inputs.end_date }}"></div>
+                    </div>
+                    
+                    <div class="options-group">
+                        <!-- Helper container to group checkboxes under Column 1 -->
+                        <div class="checkbox-container-col">
+                            <div>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="log_scale" name="log_scale" value="true" {% if inputs.log_scale %}checked{% endif %}>
+                                    Logarithmic Scale
+                                </label>
+                            </div>
+
+                            <!-- Dynamic High Yield Savings simulation input section -->
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="rf_enabled" name="rf_enabled" value="true" {% if inputs.rf_enabled %}checked{% endif %}>
+                                    Include High Yield Savings
+                                </label>
+                                <div id="rf-rate-container" {% if not inputs.rf_enabled %}class="rf-hidden"{% endif %} style="display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap;">
+                                    <input type="text" id="rf_rate" name="rf_rate" value="{{ inputs.rf_rate }}" placeholder="4.5" style="width: 50px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; text-align: center;">
+                                    <span style="font-size: 0.9em; font-weight: bold; color: #444;">% APY</span>
+                                </div>
                             </div>
                         </div>
+
+                        <!-- Smoothing slider sits under Column 2 -->
+                        <div class="smoothing-control">
+                            <label>Smoothing (Days): <b id="smoothing-readout">{{ inputs.smoothing_window }}</b></label>
+                            <div id="smoothing-slider" data-start="{{ inputs.smoothing_window }}"></div>
+                            <input type="hidden" id="smoothing_window" name="smoothing_window" value="{{ inputs.smoothing_window }}">
+                        </div>
                     </div>
 
-                    <!-- Smoothing slider sits under Column 2 -->
-                    <div class="smoothing-control">
-                        <label>Smoothing (Days): <b id="smoothing-readout">{{ inputs.smoothing_window }}</b></label>
-                        <div id="smoothing-slider" data-start="{{ inputs.smoothing_window }}"></div>
-                        <input type="hidden" id="smoothing_window" name="smoothing_window" value="{{ inputs.smoothing_window }}">
+                    {% if plot_url and min_data_date_str and max_data_date_str %}
+                    <div class="slider-container">
+                        <h3>Fine-tune Plot Range</h3>
+                        <div id="date-slider" 
+                             data-min="{{ min_data_date_str }}" 
+                             data-max="{{ max_data_date_str }}" 
+                             data-start="{{ inputs.fine_tune_start }}" 
+                             data-end="{{ inputs.fine_tune_end }}">
+                        </div>
+                        <div class="readouts">
+                            <span id="date-readout-start"></span>
+                            <span id="date-readout-end"></span>
+                        </div>
+                        <input type="hidden" id="fine_tune_start" name="fine_tune_start" value="{{ inputs.fine_tune_start }}">
+                        <input type="hidden" id="fine_tune_end" name="fine_tune_end" value="{{ inputs.fine_tune_end }}">
                     </div>
+                    {% endif %}
+                    
+                    <button type="submit">Update Plot</button>
                 </div>
 
-                {% if plot_url and min_data_date_str and max_data_date_str %}
-                <div class="slider-container">
-                    <h3>Fine-tune Plot Range</h3>
-                    <div id="date-slider" 
-                         data-min="{{ min_data_date_str }}" 
-                         data-max="{{ max_data_date_str }}" 
-                         data-start="{{ inputs.fine_tune_start }}" 
-                         data-end="{{ inputs.fine_tune_end }}">
+                <div class="plot-messages-area">
+                    {% if error %}<div class="message error-main">{{ error }}</div>{% endif %}
+                    {% if messages %}
+                    <div class="messages-container">
+                        {% for msg in messages %}
+                            <div class="message info">{{ msg }}</div>
+                        {% endfor %}
                     </div>
-                    <div class="readouts">
-                        <span id="date-readout-start"></span>
-                        <span id="date-readout-end"></span>
-                    </div>
-                    <input type="hidden" id="fine_tune_start" name="fine_tune_start" value="{{ inputs.fine_tune_start }}">
-                    <input type="hidden" id="fine_tune_end" name="fine_tune_end" value="{{ inputs.fine_tune_end }}">
+                    {% endif %}
+                    {% if plot_url %}
+                        <div class="plot-container">
+                            <img src="{{ plot_url }}" 
+                                alt="Stock Returns Plot" 
+                                width="850" 
+                                height="510" 
+                                fetchpriority="high" 
+                                loading="eager">
+                        </div>
+                    {% elif request.args and not error %} 
+                         <div class="message warning" style="margin-top:15px;">No plot generated. Check parameters.</div>
+                    {% endif %}
                 </div>
-                {% endif %}
-                
-                <button type="submit">Update Plot</button>
-            </div>
-
-            <div class="plot-messages-area">
-                {% if error %}<div class="message error-main">{{ error }}</div>{% endif %}
-                {% if messages %}
-                <div class="messages-container">
-                    {% for msg in messages %}
-                        <div class="message info">{{ msg }}</div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                {% if plot_url %}
-                    <div class="plot-container">
-                        <img src="{{ plot_url }}" 
-                            alt="Stock Returns Plot" 
-                            width="850" 
-                            height="510" 
-                            fetchpriority="high" 
-                            loading="eager">
-                    </div>
-                {% elif request.args and not error %} 
-                     <div class="message warning" style="margin-top:15px;">No plot generated. Check parameters.</div>
-                {% endif %}
-            </div>
-        </form>
+            </form>
+        </main>
     </div>
     <footer>&copy; 2026 <a href="https://blakerayvid.com">Blake Rayvid</a>. All rights reserved.</footer>
 
