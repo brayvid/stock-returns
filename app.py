@@ -16,11 +16,10 @@ import yfinance as yf
 from flask import Flask, render_template, request, Response
 from flask_caching import Cache
 from flask_compress import Compress
-import html
-import urllib.parse
-
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+import html
+import urllib.parse
 
 # --- CONSTANTS - RESOURCE LIMITS ---
 MAX_UNIQUE_TICKERS = 30      
@@ -38,7 +37,6 @@ app.config['CACHE_DEFAULT_TIMEOUT'] = 3600
 app.config['CACHE_THRESHOLD'] = 100  # Caps in-memory cache to 100 items to protect RAM
 cache = Cache(app)
 
-# --- Initialize Rate Limiter here ---
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
@@ -46,7 +44,7 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-# --- Helper to identify simulated High Yield Savings rate inputs ---
+# --- Helper to identify simulated Savings rate inputs ---
 def is_simulated_ticker(ticker_str):
     return bool(re.match(r'^-?\d+(\.\d+)?%$', ticker_str))
 
@@ -167,7 +165,7 @@ def parse_single_combination_expression(expression_str_input):
         temp_weight, temp_ticker = parse_portfolio_component(expression_str)
         
         if temp_ticker and is_simulated_ticker(temp_ticker) and temp_ticker.startswith('-'):
-            return None, None, None, "Negative High Yield Savings rates are not allowed."
+            return None, None, None, "Negative Savings rates are not allowed."
             
         is_valid_ticker = False
         if temp_ticker:
@@ -249,10 +247,6 @@ def parse_symbols_input(symbols_input_str):
 # --- Data Layer ---
 @cache.memoize()
 def download_data(tickers_tuple, start_str, end_str):
-    """
-    Downloads historical market data with auto_adjust=True so all prices 
-    are adjusted for splits and dividends are automatically reinvested.
-    """
     data_dict, messages = {}, []
     if not tickers_tuple:
         return {}, []
@@ -311,7 +305,6 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
     if not parsed_symbols and parse_errors:
         return pd.DataFrame(), combo_legend, parse_errors
 
-    # Separate real tickers from simulated ones
     real_tickers = [t for t in underlying_tickers if not is_simulated_ticker(t)]
     simulated_tickers = [t for t in underlying_tickers if is_simulated_ticker(t)]
 
@@ -340,7 +333,6 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
         underlying_df = underlying_df.reindex(trading_days_index)
         underlying_df.ffill(inplace=True)
 
-    # Calculate and inject compounding savings account parameters
     if not underlying_df.empty:
         try:
             user_start_dt = datetime.strptime(start_str, "%Y-%m-%d")
@@ -366,7 +358,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
                 exponent = (elapsed_days / total_trading_span_days) * (total_range_days / 365.0)
                 underlying_df[ticker] = ((1.0 + rate_val) ** exponent).astype('float32')
             except Exception as e:
-                all_messages.append(f"Failed to include High Yield Savings rate for '{ticker}': {str(e)}")
+                all_messages.append(f"Failed to include Savings rate for '{ticker}': {str(e)}")
 
     final_series_for_display = {}
     
@@ -428,7 +420,6 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
                     last_rebalance_quarter = current_quarter
                 
                 current_day_value = sum(shares[ticker] * prices.get(ticker, 0) for ticker in portfolio_tickers)
-                
                 portfolio_value = current_day_value if current_day_value > 0 else 0
                 portfolio_history.at[date] = portfolio_value
                 
@@ -647,7 +638,7 @@ def plot_png():
         linestyle = "--" if name == benchmark_req else "-"
         ax.plot(x_values, plot_data[name], color=color_map.get(name, 'grey'), linestyle=linestyle)
 
-    ax.set_title("Normalized Cumulative Returns (Dividends Reinvested)")
+    ax.set_title("Normalized Cumulative Returns")
     ax.set_ylabel("Return %")
     ax.grid(True, linestyle='--', alpha=0.6)
 
@@ -655,7 +646,7 @@ def plot_png():
     legend_handles = []
     for name in last_values.index:
         display_name = combination_legend.get(name, name)
-        display_name = re.sub(r'(-?\b\d+(?:\.\d+)?%)', r'High Yield Savings \1 APY', display_name)
+        display_name = re.sub(r'(-?\b\d+(?:\.\d+)?%)', r'Savings \1 APY', display_name)
 
         if len(display_name) > MAX_LEGEND_LABEL_LENGTH:
             truncated_name = display_name[:MAX_LEGEND_LABEL_LENGTH - 3] + "..."
@@ -702,12 +693,18 @@ def plot_png():
                   edgecolor='gray',
                   framealpha=0.8)
 
-    # Date formatting
+    # Informative Date Formatting
     duration_days = (plot_data.index.max() - plot_data.index.min()).days
-    if duration_days > 365.25 * 3: date_fmt = '%Y'
-    elif duration_days > 180: date_fmt = '%b %Y'
-    elif duration_days > 30: date_fmt = '%b %d'
-    else: date_fmt = '%m/%d'
+    if duration_days > 365.25 * 3:
+        date_fmt = '%b %Y'        # e.g., "Jan 2022", "Jul 2024"
+    elif duration_days > 180:
+        date_fmt = '%b %Y'        # e.g., "Feb 2024", "Oct 2024"
+    elif duration_days > 45:
+        date_fmt = '%b %d, %Y'    # e.g., "Mar 15, 2024"
+    elif duration_days > 7:
+        date_fmt = '%b %d'        # e.g., "Oct 14", "Nov 02"
+    else:
+        date_fmt = '%a, %b %d'    # e.g., "Mon, Oct 14"
 
     def business_day_formatter(x, pos):
         try:
@@ -717,9 +714,14 @@ def plot_png():
         except (ValueError, IndexError): return ''
         return ''
 
-    ax.xaxis.set_major_locator(plt.MaxNLocator(nbins=8, integer=True))
+    # Generate visually equidistant ticks across the entire plot range
+    num_ticks = 7 if len(plot_data) >= 7 else len(plot_data)
+    tick_positions = np.linspace(0, len(plot_data) - 1, num_ticks)
+
+    ax.set_xlim(0, len(plot_data) - 1)
+    ax.xaxis.set_major_locator(FixedLocator(tick_positions))
     ax.xaxis.set_major_formatter(FuncFormatter(business_day_formatter))
-    fig.autofmt_xdate()
+    fig.autofmt_xdate(rotation=20, ha='right')
     
     # Y-axis
     def generate_geometric_ticks(ymin, ymax, num_ticks=8):
@@ -747,7 +749,7 @@ def plot_png():
     ax_right.yaxis.set_minor_locator(NullLocator()); ax_right.yaxis.set_major_formatter(percent_formatter)
     
     output = io.BytesIO()
-    plt.savefig(output, format='png', dpi=85)
+    plt.savefig(output, format='png', dpi=100)
     plt.close(fig)
     output.seek(0)
 
