@@ -19,6 +19,9 @@ from flask_compress import Compress
 import html
 import urllib.parse
 
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 # --- CONSTANTS - RESOURCE LIMITS ---
 MAX_UNIQUE_TICKERS = 30      
 MAX_DATE_RANGE_YEARS = 20    
@@ -29,9 +32,19 @@ MAX_LEGEND_LABEL_LENGTH = 55
 matplotlib.use('Agg')
 app = Flask(__name__)
 Compress(app)
+
 app.config['CACHE_TYPE'] = 'SimpleCache'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 3600
+app.config['CACHE_THRESHOLD'] = 100  # Caps in-memory cache to 100 items to protect RAM
 cache = Cache(app)
+
+# --- Initialize Rate Limiter here ---
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=["60 per minute", "5 per second"],
+    storage_uri="memory://"
+)
 
 # --- Helper to identify simulated High Yield Savings rate inputs ---
 def is_simulated_ticker(ticker_str):
@@ -121,7 +134,7 @@ def parse_single_combination_expression(expression_str_input):
             
         final_components = []
 
-        # Case 1: Mixed weighted and unweighted components (new logic).
+        # Case 1: Mixed weighted and unweighted components
         if weighted_components_temp and unweighted_tickers_temp:
             if total_defined_weight >= 1.0:
                 return None, None, None, f"Sum of defined weights in '{expression_str}' is {total_defined_weight:.2f}, leaving no room for unweighted tickers."
@@ -132,13 +145,13 @@ def parse_single_combination_expression(expression_str_input):
             for ticker in unweighted_tickers_temp:
                 final_components.append((weight_per_unweighted, ticker))
         
-        # Case 2: All components have explicit weights.
+        # Case 2: All components have explicit weights
         elif weighted_components_temp:
             if abs(total_defined_weight - 1.0) > 0.001:
                 return None, None, None, f"Fully weighted portfolio '{expression_str}' must sum to 1.0, but sums to {total_defined_weight:.2f}."
             final_components = weighted_components_temp
         
-        # Case 3: All components are unweighted. Classic equal split.
+        # Case 3: All components are unweighted. Classic equal split
         elif unweighted_tickers_temp:
             equal_weight = 1.0 / len(unweighted_tickers_temp)
             for ticker in unweighted_tickers_temp:
@@ -146,14 +159,13 @@ def parse_single_combination_expression(expression_str_input):
 
         return final_components, list(underlying_tickers), "rebalanced", None
 
-    # --- 2. Basket of shares (using + or -) - NOW DISALLOWED ---
+    # --- 2. Basket of shares (using + or -) - DISALLOWED ---
     if '+' in expression_str:
         return None, None, None, "Basket of shares syntax (e.g., 'A + B') is no longer supported. Use portfolio syntax (A, B) for combinations."
     
     if '-' in expression_str:
         temp_weight, temp_ticker = parse_portfolio_component(expression_str)
         
-        # Intercept negative interest rates and return a specific validation error
         if temp_ticker and is_simulated_ticker(temp_ticker) and temp_ticker.startswith('-'):
             return None, None, None, "Negative High Yield Savings rates are not allowed."
             
@@ -169,11 +181,8 @@ def parse_single_combination_expression(expression_str_input):
     if not ticker:
         return None, None, None, f"Invalid format for '{expression_str}'"
     
-    # Simple Ticker like 'GOOG'
     if weight is None:
         return [(1.0, ticker)], [ticker], 'simple', None
-    
-    # Scaled Ticker like '0.5*GOOG'. We'll use the 'linear' path for this.
     else:
         return [(weight, ticker)], [ticker], 'linear', None
 
@@ -240,41 +249,55 @@ def parse_symbols_input(symbols_input_str):
 # --- Data Layer ---
 @cache.memoize()
 def download_data(tickers_tuple, start_str, end_str):
+    """
+    Downloads historical market data with auto_adjust=True so all prices 
+    are adjusted for splits and dividends are automatically reinvested.
+    """
     data_dict, messages = {}, []
-    tickers_with_dividends = []
     if not tickers_tuple:
-        return {}, [], []
-    df_adjusted = yf.download(
-        list(tickers_tuple), start=start_str, end=end_str,
-        auto_adjust=True, progress=False, group_by='ticker'
-    ).astype('float32')
+        return {}, []
+
+    try:
+        df_adjusted = yf.download(
+            list(tickers_tuple),
+            start=start_str,
+            end=end_str,
+            auto_adjust=True,
+            progress=False,
+            group_by='ticker'
+        ).astype('float32')
+    except Exception as e:
+        messages.append(f"Error downloading market data: {str(e)}")
+        return {}, messages
+
     if df_adjusted.empty:
-        messages.append(f"yfinance returned no price data.")
-        return {}, [], messages
-    df_actions = yf.download(
-        list(tickers_tuple), start=start_str, end=end_str,
-        actions=True, progress=False, group_by='ticker'
-    )
+        messages.append("yfinance returned no price data.")
+        return {}, messages
+
     for ticker in tickers_tuple:
         try:
-            close_series = df_adjusted[ticker]['Close'] if len(tickers_tuple) > 1 else df_adjusted['Close']
-            if not close_series.dropna().empty:
-                data_dict[ticker] = close_series.dropna()
-                if not df_actions.empty:
-                    try:
-                        dividend_series = df_actions[ticker]['Dividends'] if len(tickers_tuple) > 1 else df_actions['Dividends']
-                        if dividend_series.sum() > 0:
-                            tickers_with_dividends.append(ticker)
-                    except (KeyError, TypeError):
-                        pass
+            if len(tickers_tuple) > 1:
+                close_series = df_adjusted[ticker]['Close'] if ticker in df_adjusted.columns else pd.Series(dtype='float32')
+            else:
+                if isinstance(df_adjusted.columns, pd.MultiIndex) and ticker in df_adjusted.columns:
+                    close_series = df_adjusted[ticker]['Close']
+                elif 'Close' in df_adjusted.columns:
+                    close_series = df_adjusted['Close']
+                else:
+                    close_series = pd.Series(dtype='float32')
+
+            close_series = close_series.dropna()
+            if not close_series.empty:
+                data_dict[ticker] = close_series
             else:
                 messages.append(f"No valid 'Close' data found for {ticker}.")
-        except (KeyError, TypeError):
-            messages.append(f"Failed to process or download price data for {ticker}.")
-    return data_dict, sorted(list(set(tickers_with_dividends))), messages
+        except Exception:
+            messages.append(f"Failed to process price data for {ticker}.")
+
+    return data_dict, messages
 
 @cache.memoize()
-def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smoothing_window=1):
+def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
     try:
         start_dt = datetime.strptime(start_str, "%Y-%m-%d")
         end_dt = datetime.strptime(end_str, "%Y-%m-%d")
@@ -306,7 +329,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
         yf_end_str = end_str
 
     tickers_tuple = tuple(sorted(list(all_tickers_to_download)))
-    raw_data_dict, tickers_with_dividends, download_messages = download_data(tickers_tuple, start_str, yf_end_str)
+    raw_data_dict, download_messages = download_data(tickers_tuple, start_str, yf_end_str)
     all_messages = parse_errors + download_messages
     if not raw_data_dict: return pd.DataFrame(), combo_legend, all_messages + ["Failed to download underlying data."]
     
@@ -322,7 +345,6 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
         try:
             user_start_dt = datetime.strptime(start_str, "%Y-%m-%d")
             user_end_dt = datetime.strptime(end_str, "%Y-%m-%d")
-            # +1 makes the range calendar-inclusive (e.g., Jan 1 to Dec 31 is exactly 365 days)
             total_range_days = (user_end_dt - user_start_dt).days + 1
         except Exception:
             total_range_days = 365.0
@@ -340,13 +362,8 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str, smo
         for ticker in simulated_tickers:
             try:
                 rate_val = float(ticker.replace('%', '')) / 100.0
-                
-                # Calculate elapsed days relative to the first plotted day
                 elapsed_days = (underlying_df.index - first_trading_date).days
-                
-                # Scale exponent to map the requested calendar span onto the plotted trading index
                 exponent = (elapsed_days / total_trading_span_days) * (total_range_days / 365.0)
-                
                 underlying_df[ticker] = ((1.0 + rate_val) ** exponent).astype('float32')
             except Exception as e:
                 all_messages.append(f"Failed to include High Yield Savings rate for '{ticker}': {str(e)}")
@@ -451,14 +468,12 @@ def index():
     default_end_dt = datetime.today()
     
     symbols_req = request.args.get("symbols", "SOXX, MAGS, VXUS, GLD")
-    
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
     benchmark_req = request.args.get("benchmark", "SPY").strip().upper()
     end_date_req = request.args.get("end_date", default_end_dt.strftime("%Y-%m-%d"))
     log_scale_req = request.args.get("log_scale", "false").lower() == "true"
     smoothing_req = int(request.args.get("smoothing_window", 1))
-    
-    # Check if request.args is completely empty (first load)
+
     if not request.args:
         rf_enabled_req = False
     else:
@@ -480,7 +495,6 @@ def index():
     except ValueError:
         error_message = "Invalid date format. Please use YYYY-MM-DD."
         
-    # Append the risk-free rate programmatically to the pipeline if checked
     effective_symbols = symbols_req
     if rf_enabled_req and rf_rate_req:
         clean_rate = rf_rate_req.replace('%', '').strip()
@@ -491,7 +505,7 @@ def index():
                 effective_symbols = f"{clean_rate}%"
 
     combined_data, combination_legend, messages = get_processed_data(
-        effective_symbols, benchmark_req, start_date_req, end_date_req, smoothing_req
+        effective_symbols, benchmark_req, start_date_req, end_date_req
     )
     if combined_data.empty:
         return render_template("index.html", error=error_message, inputs=template_inputs, messages=[])
@@ -633,7 +647,7 @@ def plot_png():
         linestyle = "--" if name == benchmark_req else "-"
         ax.plot(x_values, plot_data[name], color=color_map.get(name, 'grey'), linestyle=linestyle)
 
-    ax.set_title("Normalized Cumulative Returns")
+    ax.set_title("Normalized Cumulative Returns (Dividends Reinvested)")
     ax.set_ylabel("Return %")
     ax.grid(True, linestyle='--', alpha=0.6)
 
@@ -641,8 +655,6 @@ def plot_png():
     legend_handles = []
     for name in last_values.index:
         display_name = combination_legend.get(name, name)
-        
-        # --- Convert "X.XX%" format into "High Yield Savings X.XX% APY" ---
         display_name = re.sub(r'(-?\b\d+(?:\.\d+)?%)', r'High Yield Savings \1 APY', display_name)
 
         if len(display_name) > MAX_LEGEND_LABEL_LENGTH:
@@ -680,7 +692,6 @@ def plot_png():
         line_color = color_map.get(name, 'grey')
         linestyle = "--" if name == benchmark_req else "-"
         legend_handles.append(Line2D([0], [0], color=line_color, lw=2, linestyle=linestyle, label=final_label))
-
 
     if legend_handles:
         ax.legend(handles=legend_handles, 

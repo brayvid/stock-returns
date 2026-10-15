@@ -84,7 +84,7 @@
         .main-page-title a:hover { text-decoration: underline; }
         .options-group { 
             display: grid; 
-            grid-template-columns: 1fr 1fr; /* Align columns with date inputs */
+            grid-template-columns: 1fr 1fr;
             gap: 15px 30px; 
             margin-top: 15px; 
             padding-bottom: 10px; 
@@ -98,7 +98,6 @@
             align-items: flex-end;
         }
 
-        /* Align checkboxes precisely with the horizontal slider track */
         .options-group .checkbox-container-col > div {
             margin-bottom: 1px;
         }
@@ -110,7 +109,6 @@
         .smoothing-control label { display: block; }
         #smoothing-slider { margin-top: 8px; }        
 
-        /* --- Disable click-jump on smoothing slider --- */
         #smoothing-slider .noUi-base {
             pointer-events: none; 
         }
@@ -122,7 +120,6 @@
             cursor: grabbing;
         }
 
-        /* --- Info Icon & Modal Styles --- */
         .info-icon {
             color: #0d66c5;
             cursor: pointer;
@@ -130,7 +127,7 @@
             font-size: 1.1em;
             vertical-align: middle;
             user-select: none;
-            display: inline-block; /* Helps with click targeting */
+            display: inline-block;
         }
         .info-icon:hover { color: #0a58ca; }
 
@@ -184,7 +181,6 @@
             word-break: break-word;
         }
 
-        /* Helper class for dynamic risk-free inputs display */
         .rf-hidden { display: none !important; }
 
         @keyframes fadeIn {
@@ -192,7 +188,6 @@
             to {opacity: 1;}
         }
 
-        /* Mobile Widescreen/Landscape & Tablet Viewports */
         @media (max-width: 950px) {
             .options-group { 
                 display: flex;
@@ -209,7 +204,6 @@
                 width: 100%;
                 align-items: center;
             }
-            /* Reset desktop alignment margins on smaller screens */
             .options-group .checkbox-container-col > div {
                 margin-bottom: 0;
             }
@@ -220,7 +214,6 @@
             }
         }   
 
-        /* Mobile Portrait Viewports */
         @media (max-width: 600px) {
             .main-page-title { font-size: 1.75em; }
             .control-group { grid-template-columns: 1fr; }
@@ -264,7 +257,6 @@
                     </div>
                     
                     <div class="options-group">
-                        <!-- Helper container to group checkboxes under Column 1 -->
                         <div class="checkbox-container-col">
                             <div>
                                 <label class="checkbox-label">
@@ -368,6 +360,11 @@
             </div>
 
             <div class="modal-section">
+                <h4>Dividend Reinvestment</h4>
+                <p>All returns reflect total return with dividends automatically reinvested where applicable (such as dividend-paying stocks and ETFs).</p>
+            </div>
+
+            <div class="modal-section">
                 <h4>High Yield Savings Account Simulation</h4>
                 <p>To plot a baseline savings yield with daily compounding, check the <strong>Include High Yield Savings</strong> checkbox and set your target annual yield directly on the control panel.</p>
             </div>
@@ -379,7 +376,6 @@
     document.addEventListener('DOMContentLoaded', function () {
         const mainForm = document.querySelector('.content-form');
         
-        // Restore scroll position instantly on DOM load to prevent visual flicker
         const savedScroll = sessionStorage.getItem('scrollPosition');
         if (savedScroll !== null) {
             window.scrollTo(0, parseFloat(savedScroll));
@@ -409,13 +405,11 @@
 
         if (!mainForm) return;
 
-        // Helper to save scroll position before JS-triggered submissions
         function submitFormWithScroll() {
             sessionStorage.setItem('scrollPosition', window.scrollY);
             mainForm.submit();
         }
 
-        // Save scroll position on manual form submissions (button clicks)
         mainForm.addEventListener('submit', function() {
             sessionStorage.setItem('scrollPosition', window.scrollY);
         });
@@ -482,7 +476,6 @@
                 step: 1
             });
 
-            // --- ACCESSIBILITY FIX ---
             const handle = smoothingSliderEl.querySelector('.noUi-handle');
             if (handle) {
                 handle.setAttribute('aria-label', 'Smoothing Window in Days');
@@ -521,7 +514,6 @@
                 behaviour: 'tap-drag',
             });
 
-            // --- ACCESSIBILITY FIX ---
             const handles = dateSliderEl.querySelectorAll('.noUi-handle');
             if (handles[0]) {
                 handles[0].setAttribute('aria-label', 'Fine-tune Start Date');

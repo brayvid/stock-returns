@@ -1,6 +1,6 @@
 # Compare Stock Returns
 
-A web-based financial calculation engine that generates normalized cumulative returns charts for custom portfolios, individual tickers, and simulated high-yield savings accounts.
+A web-based financial research and analysis tool that generates normalized cumulative total return charts for custom portfolios, individual tickers, and simulated high-yield savings accounts with automatic dividend reinvestment.
 
 ## Key URLs
 
@@ -15,14 +15,14 @@ The primary interface and chart generator accept HTTP GET requests with these pa
 
 - `symbols` (string): Comma-separated list of tickers or portfolio expressions (details below). Max 20 requested symbols.
 - `benchmark` (string): Reference asset benchmark for alpha/beta/vol calculations. Defaults to `SPY`.
-- `start_date` (string): Format `YYYY-MM-DD`. Start of comparison period.
-- `end_date` (string): Format `YYYY-MM-DD`. End of comparison period.
+- `start_date` (string): Format `YYYY-MM-DD`. Start of historical comparison period.
+- `end_date` (string): Format `YYYY-MM-DD`. End of historical comparison period.
 - `log_scale` (boolean): Set to `true` to display y-axis logarithmically.
 - `smoothing_window` (integer): Days for rolling average smoothing (range: 1 to 90).
 - `rf_enabled` (boolean): Set to `true` to append a simulated high-yield savings baseline.
 - `rf_rate` (string/float): Target APY for the savings baseline (e.g., `4.5`).
-- `fine_tune_start` (string): Sub-range start date for chart rendering (`YYYY-MM-DD`).
-- `fine_tune_end` (string): Sub-range end date for chart rendering (`YYYY-MM-DD`).
+- `fine_tune_start` (string): Sub-range start date for chart rendering without refetching data (`YYYY-MM-DD`).
+- `fine_tune_end` (string): Sub-range end date for chart rendering without refetching data (`YYYY-MM-DD`).
 
 ## Expression Formatting Rules
 
@@ -30,19 +30,28 @@ The `symbols` parameter supports three types of structures:
 
 ### 1. Simple Tickers
 Standard stock, ETF, commodity, or cryptocurrency symbols.
+*   **Total Return Policy:** Historical prices are split-adjusted and automatically factor in dividend reinvestment on ex-dividend dates (`auto_adjust=True`).
 *   **Examples:** `AAPL`, `VOO`, `BTC-USD`, `GC=F`
 
 ### 2. Quarterly-Rebalanced Portfolios
-Wrapped in parentheses `( )`, components are automatically rebalanced quarterly.
+Wrapped in parentheses `( )`, portfolio components are automatically rebalanced quarterly based on total returns.
 *   **Equal-Weighted:** Wrap tickers with comma separation.
     *   *Example:* `(AAPL, MSFT, GOOGL)`
 *   **Explicitly Weighted:** Prepend float weights to tickers (must be between 0.0 and 1.0, exclusive).
-    *   *Fully Weighted Example (sums to 1.0):* `(0.6*VTI, 0.4*TLT)`
+    *   *Fully Weighted Example (sums to 1.0):* `(0.6*SPY, 0.4*TLT)`
     *   *Partially Weighted Example:* `(0.5*QQQ, VOO, DIA)` 
         *Note: The remaining 0.5 weight is divided equally among unweighted assets (VOO and DIA get 0.25 each).*
 
 ### 3. High Yield Savings Baseline
-Inputs matching `<number>%` (e.g., `4.5%`) simulate daily compounding over the target period.
+Inputs matching `<number>%` (e.g., `4.5%`) simulate continuous daily compounding over the target period mapped directly to trading day coordinates.
+
+## Performance & Risk Metrics
+
+For every plotted line, the chart legend provides:
+*   **Cumulative Return:** Total percentage gain from the first available normalized date.
+*   **Beta:** Systematic risk sensitivity relative to the specified benchmark.
+*   **Alpha:** Annualized excess return over benchmark performance.
+*   **Vol:** Historical volatility (annualized standard deviation of daily returns, $\sqrt{252}$).
 
 ## System Limits & Validation Rules
 
