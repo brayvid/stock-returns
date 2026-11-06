@@ -5,6 +5,11 @@ import math
 import re
 from datetime import datetime, timedelta
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None
+
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import dates as mdates
@@ -44,7 +49,7 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-# --- Helper to identify simulated Savings rate inputs ---
+# --- Helper to identify simulated Fixed Income rate inputs ---
 def is_simulated_ticker(ticker_str):
     return bool(re.match(r'^-?\d+(\.\d+)?%$', ticker_str))
 
@@ -165,7 +170,7 @@ def parse_single_combination_expression(expression_str_input):
         temp_weight, temp_ticker = parse_portfolio_component(expression_str)
         
         if temp_ticker and is_simulated_ticker(temp_ticker) and temp_ticker.startswith('-'):
-            return None, None, None, "Negative Savings rates are not allowed."
+            return None, None, None, "Negative Fixed Income rates are not allowed."
             
         is_valid_ticker = False
         if temp_ticker:
@@ -366,7 +371,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
                 exponent = (elapsed_days / total_trading_span_days) * (total_range_days / 365.0)
                 underlying_df[ticker] = ((1.0 + rate_val) ** exponent).astype('float32')
             except Exception as e:
-                all_messages.append(f"Failed to include Savings rate for '{ticker}': {str(e)}")
+                all_messages.append(f"Failed to include Fixed Income rate for '{ticker}': {str(e)}")
 
     final_series_for_display = {}
     
@@ -449,21 +454,57 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
         if common_start_date.to_pydatetime(warn=False) > user_start_date:
             all_messages.append(f"Chart starts on {common_start_date.strftime('%Y-%m-%d')} due to data availability.")
 
-    # --- Check for Future / Truncated End Date ---
+    # --- End Date & Market Hours Awareness ---
     if not final_df.empty:
-        user_end_date = pd.to_datetime(end_str)
-        last_available_date = final_df.index.max()
-        today_date = pd.to_datetime(datetime.today().strftime("%Y-%m-%d"))
+        if ZoneInfo:
+            now_et = datetime.now(ZoneInfo("America/New_York"))
+        else:
+            now_et = datetime.now()
 
-        if user_end_date > last_available_date:
-            if user_end_date > today_date:
+        today_et = now_et.date()
+        user_end_dt = pd.to_datetime(end_str).date()
+        last_avail_dt = final_df.index.max().date()
+
+        if user_end_dt > last_avail_dt:
+            last_avail_str = last_avail_dt.strftime("%Y-%m-%d")
+
+            # 1. Date is strictly in the future
+            if user_end_dt > today_et:
                 all_messages.append(
-                    f"Notice: End date ({end_str}) is in the future. "
-                    f"Data is only available through {last_available_date.strftime('%Y-%m-%d')}."
+                    f"Notice: Requested end date ({end_str}) is in the future. "
+                    f"Data is available through {last_avail_str}."
                 )
+            # 2. Date is TODAY (weekday morning, active session, or weekend)
+            elif user_end_dt == today_et:
+                is_weekend = now_et.weekday() >= 5  # 5 = Saturday, 6 = Sunday
+
+                if is_weekend:
+                    all_messages.append(
+                        f"Notice: Markets are closed for the weekend. "
+                        f"Chart reflects the most recent trading close ({last_avail_str})."
+                    )
+                elif now_et.hour < 9 or (now_et.hour == 9 and now_et.minute < 30):
+                    # Pre-market (e.g. 6:00 AM)
+                    all_messages.append(
+                        f"Notice: Today's trading data ({end_str}) is not available yet "
+                        f"(market opens at 9:30 AM ET). Chart ends on {last_avail_str}."
+                    )
+                elif now_et.hour < 16 or (now_et.hour == 16 and now_et.minute < 30):
+                    # Active session
+                    all_messages.append(
+                        f"Notice: Today's market session ({end_str}) is currently active. "
+                        f"Daily closing prices settle after 4:00 PM ET. Chart ends on {last_avail_str}."
+                    )
+                else:
+                    # Post-market settling
+                    all_messages.append(
+                        f"Notice: Today's official closing data ({end_str}) is still being processed "
+                        f"by providers. Chart ends on {last_avail_str}."
+                    )
+            # 3. User requested a weekend or market holiday in the PAST
             else:
                 all_messages.append(
-                    f"Chart ends on {last_available_date.strftime('%Y-%m-%d')} due to market close/weekend."
+                    f"Notice: Chart ends on {last_avail_str} because {end_str} was a market holiday or weekend."
                 )
     
     return final_df.dropna(how='all'), combo_legend, all_messages
@@ -545,7 +586,8 @@ def index():
             messages[0] if messages 
             else f"No trading data found between {start_date_req} and {end_date_req} for the requested symbols."
         )
-        return render_template("index.html", error=detailed_error, inputs=template_inputs, messages=messages[1:])  
+        return render_template("index.html", error=detailed_error, inputs=template_inputs, messages=messages[1:])
+
     min_data_date = combined_data.index.min()
     max_data_date = combined_data.index.max()
     fine_tune_start_req = request.args.get("fine_tune_start")
