@@ -295,10 +295,18 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
     try:
         start_dt = datetime.strptime(start_str, "%Y-%m-%d")
         end_dt = datetime.strptime(end_str, "%Y-%m-%d")
+        today = datetime.today()
+
+        if start_dt >= end_dt:
+            return pd.DataFrame(), {}, ["Start date must be strictly before end date."]
+        if start_dt > today:
+            return pd.DataFrame(), {}, [f"Start date ({start_str}) cannot be in the future."]
+        if start_dt.year < 1970:
+            return pd.DataFrame(), {}, [f"Start date ({start_str}) is out of bounds (must be after 1970)."]
         if (end_dt - start_dt).days > (MAX_DATE_RANGE_YEARS * 365.25):
-            return pd.DataFrame(), {}, [f"Date range limit exceeded: Max {MAX_DATE_RANGE_YEARS} years."]
+            return pd.DataFrame(), {}, [f"Date range exceeds maximum limit of {MAX_DATE_RANGE_YEARS} years."]
     except (ValueError, TypeError):
-        return pd.DataFrame(), {}, ["Invalid date format provided."]
+        return pd.DataFrame(), {}, ["Invalid date format provided. Please use YYYY-MM-DD."]
 
     parsed_symbols, underlying_tickers, parse_errors, combo_legend = parse_symbols_input(symbols_input_str)
     
@@ -440,6 +448,23 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
         user_start_date = pd.to_datetime(start_str)
         if common_start_date.to_pydatetime(warn=False) > user_start_date:
             all_messages.append(f"Chart starts on {common_start_date.strftime('%Y-%m-%d')} due to data availability.")
+
+    # --- Check for Future / Truncated End Date ---
+    if not final_df.empty:
+        user_end_date = pd.to_datetime(end_str)
+        last_available_date = final_df.index.max()
+        today_date = pd.to_datetime(datetime.today().strftime("%Y-%m-%d"))
+
+        if user_end_date > last_available_date:
+            if user_end_date > today_date:
+                all_messages.append(
+                    f"Notice: End date ({end_str}) is in the future. "
+                    f"Data is only available through {last_available_date.strftime('%Y-%m-%d')}."
+                )
+            else:
+                all_messages.append(
+                    f"Chart ends on {last_available_date.strftime('%Y-%m-%d')} due to market close/weekend."
+                )
     
     return final_df.dropna(how='all'), combo_legend, all_messages
 
@@ -478,14 +503,29 @@ def index():
         "rf_enabled": rf_enabled_req, "rf_rate": rf_rate_req
     }
     
+    # --- Date Parsing & Boundary Validation ---
     error_message = None
+    today = datetime.today()
+
     try:
         start_date_dt = datetime.strptime(start_date_req, "%Y-%m-%d")
         end_date_dt = datetime.strptime(end_date_req, "%Y-%m-%d")
-        if start_date_dt >= end_date_dt: error_message = "Start date must be before end date."
+        
+        if start_date_dt >= end_date_dt:
+            error_message = "Start date must be strictly before end date."
+        elif start_date_dt > today:
+            error_message = f"Start date ({start_date_req}) cannot be in the future."
+        elif start_date_dt.year < 1970:
+            error_message = f"Start date ({start_date_req}) is out of bounds (must be after 1970)."
+        elif (end_date_dt - start_date_dt).days > (MAX_DATE_RANGE_YEARS * 365.25):
+            error_message = f"Date range exceeds the maximum allowed limit of {MAX_DATE_RANGE_YEARS} years."
     except ValueError:
         error_message = "Invalid date format. Please use YYYY-MM-DD."
-        
+
+    # If there is already a date boundary error, do not attempt to fetch data
+    if error_message:
+        return render_template("index.html", error=error_message, inputs=template_inputs, messages=[])
+
     effective_symbols = symbols_req
     if rf_enabled_req and rf_rate_req:
         clean_rate = rf_rate_req.replace('%', '').strip()
@@ -498,9 +538,14 @@ def index():
     combined_data, combination_legend, messages = get_processed_data(
         effective_symbols, benchmark_req, start_date_req, end_date_req
     )
+
+    # If combined_data is empty, pass through the actual messages instead of messages=[]
     if combined_data.empty:
-        return render_template("index.html", error=error_message, inputs=template_inputs, messages=[])
-        
+        detailed_error = (
+            messages[0] if messages 
+            else f"No trading data found between {start_date_req} and {end_date_req} for the requested symbols."
+        )
+        return render_template("index.html", error=detailed_error, inputs=template_inputs, messages=messages[1:])  
     min_data_date = combined_data.index.min()
     max_data_date = combined_data.index.max()
     fine_tune_start_req = request.args.get("fine_tune_start")
@@ -646,7 +691,7 @@ def plot_png():
     legend_handles = []
     for name in last_values.index:
         display_name = combination_legend.get(name, name)
-        display_name = re.sub(r'(-?\b\d+(?:\.\d+)?%)', r'Savings \1 APY', display_name)
+        display_name = re.sub(r'(-?\b\d+(?:\.\d+)?%)', r'Fixed Income \1 APY', display_name)
 
         if len(display_name) > MAX_LEGEND_LABEL_LENGTH:
             truncated_name = display_name[:MAX_LEGEND_LABEL_LENGTH - 3] + "..."
@@ -674,7 +719,7 @@ def plot_png():
                 if -0.005 < alpha_val < 0: alpha_val = 0.0 
                 metrics_in_parens.append(f"Alpha: {alpha_val:.2f}")
             if hv_val is not None:
-                metrics_in_parens.append(f"Vol: {hv_val:.2f}")
+                metrics_in_parens.append(f"HV: {hv_val:.2f}")
         
         final_label = base_label
         if metrics_in_parens:

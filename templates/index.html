@@ -265,11 +265,11 @@
                                 </label>
                             </div>
 
-                            <!-- Savings simulation input section -->
+                            <!-- Fixed income asset simulation input section -->
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <label class="checkbox-label">
                                     <input type="checkbox" id="rf_enabled" name="rf_enabled" value="true" {% if inputs.rf_enabled %}checked{% endif %}>
-                                    Include High Yield Savings
+                                    Include Fixed Income Asset
                                 </label>
                                 <div id="rf-rate-container" {% if not inputs.rf_enabled %}class="rf-hidden"{% endif %} style="display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap;">
                                     <input type="text" id="rf_rate" name="rf_rate" value="{{ inputs.rf_rate }}" placeholder="4.5" style="width: 50px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; text-align: center;">
@@ -338,7 +338,7 @@
     <div id="info-modal" class="modal-overlay">
         <div class="modal-box">
             <span class="close-btn">&times;</span>
-            <h3 class="modal-title">Formatting Rules</h3>
+            <h3 class="modal-title">Formatting Rules & Guide</h3>
             
             <div class="modal-section">
                 <h4>Single Assets</h4>
@@ -365,11 +365,30 @@
             </div>
 
             <div class="modal-section">
-                <h4>High Yield Savings Account Simulation</h4>
-                <p>To plot a baseline savings yield with daily compounding, check the <strong>Include High Yield Savings</strong> checkbox and set your target annual yield directly on the control panel.</p>
+                <h4>Fixed Income Asset Simulation</h4>
+                <p>To plot a baseline fixed income yield with daily compounding, check the <strong>Include Fixed Income Asset</strong> checkbox and set your target annual yield directly on the control panel.</p>
+            </div>
+
+            <div class="modal-section">
+                <h4>Performance Metrics</h4>
+                <p>Metrics shown in the legend are calculated over the plotted timeframe:</p>
+                <ul style="font-size: 0.9rem; color: #666; padding-left: 20px; margin-top: 5px;">
+                    <li style="margin-bottom: 8px;">
+                        <a href="https://www.investopedia.com/terms/b/beta.asp" target="_blank" rel="noopener noreferrer" style="color: #0d66c5; text-decoration: none; font-weight: 600;">Beta</a>: 
+                        Sensitivity to the specified benchmark (e.g., <code>SPY</code>). A Beta of <code>1.0</code> moves in lockstep with the benchmark, <code>&gt; 1.0</code> indicates higher sensitivity/volatility, and <code>&lt; 1.0</code> indicates lower market sensitivity.
+                    </li>
+                    <li style="margin-bottom: 8px;">
+                        <a href="https://www.investopedia.com/terms/a/alpha.asp" target="_blank" rel="noopener noreferrer" style="color: #0d66c5; text-decoration: none; font-weight: 600;">Alpha</a>: 
+                        Annualized excess return beyond what would be predicted by the asset's Beta and the benchmark's return. A positive Alpha indicates risk-adjusted outperformance.
+                    </li>
+                    <li style="margin-bottom: 8px;">
+                        <a href="https://www.investopedia.com/terms/h/historicalvolatility.asp" target="_blank" rel="noopener noreferrer" style="color: #0d66c5; text-decoration: none; font-weight: 600;">HV (Historical Volatility)</a>: 
+                        Annualized standard deviation of daily returns (scaled by &radic;252 trading days). Represents the overall price variability/risk of the asset.
+                    </li>
+                </ul>
             </div>
         </div>
-    </div>
+    </div>  
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js" defer></script>
     <script>
@@ -381,7 +400,6 @@
             window.scrollTo(0, parseFloat(savedScroll));
             sessionStorage.removeItem('scrollPosition');
         }
-
         // --- Modal Logic ---
         const modal = document.getElementById('info-modal');
         const btn = document.getElementById('info-trigger');
@@ -401,6 +419,12 @@
                     modal.style.display = "none";
                 }
             }
+            // Close modal when pressing the Escape key
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape' || event.key === 'Esc') {
+                    modal.style.display = "none";
+                }
+            });
         }
 
         if (!mainForm) return;
@@ -421,7 +445,7 @@
             });
         }
 
-        // --- High Yield Savings Baseline Inputs Control ---
+        // --- Fixed Income Asset Inputs Control ---
         const rfEnabledToggle = document.getElementById('rf_enabled');
         const rfRateContainer = document.getElementById('rf-rate-container');
         const rfRateInput = document.getElementById('rf_rate');
