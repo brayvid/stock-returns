@@ -49,6 +49,21 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
+# --- Timezone Helpers ---
+def get_market_now():
+    """Returns the current datetime in US Eastern (market) time."""
+    if ZoneInfo:
+        try:
+            return datetime.now(ZoneInfo("America/New_York"))
+        except Exception:
+            pass
+    return datetime.now()
+
+def get_market_today():
+    """Returns a naive datetime representing today's date in market time."""
+    return get_market_now().replace(tzinfo=None)
+
+
 # --- Helper to identify simulated Fixed Income rate inputs ---
 def is_simulated_ticker(ticker_str):
     return bool(re.match(r'^-?\d+(\.\d+)?%$', ticker_str))
@@ -300,7 +315,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
     try:
         start_dt = datetime.strptime(start_str, "%Y-%m-%d")
         end_dt = datetime.strptime(end_str, "%Y-%m-%d")
-        today = datetime.today()
+        today = get_market_today()
 
         if start_dt >= end_dt:
             return pd.DataFrame(), {}, ["Start date must be strictly before end date."]
@@ -454,13 +469,9 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
         if common_start_date.to_pydatetime(warn=False) > user_start_date:
             all_messages.append(f"Chart starts on {common_start_date.strftime('%Y-%m-%d')} due to data availability.")
 
-    # --- End Date & Market Hours Awareness ---
+# --- End Date & Market Hours Awareness ---
     if not final_df.empty:
-        if ZoneInfo:
-            now_et = datetime.now(ZoneInfo("America/New_York"))
-        else:
-            now_et = datetime.now()
-
+        now_et = get_market_now()
         today_et = now_et.date()
         user_end_dt = pd.to_datetime(end_str).date()
         last_avail_dt = final_df.index.max().date()
@@ -512,7 +523,7 @@ def get_processed_data(symbols_input_str, benchmark_req, start_str, end_str):
 # --- Controller Layer (Flask Routes) ---
 @app.route('/', methods=['GET'])
 def index():
-    today = datetime.today()
+    today = get_market_today()
     q_start_month = (today.month - 1) // 3 * 3 + 1
     q_start_date = datetime(today.year, q_start_month, 1)
     if today - q_start_date < timedelta(days=7):
@@ -522,7 +533,7 @@ def index():
     else:
         default_start_dt = q_start_date
         
-    default_end_dt = datetime.today()
+    default_end_dt = today
     
     symbols_req = request.args.get("symbols", "SOXX, MAGS, VXUS, GLD")
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
@@ -546,7 +557,6 @@ def index():
     
     # --- Date Parsing & Boundary Validation ---
     error_message = None
-    today = datetime.today()
 
     try:
         start_date_dt = datetime.strptime(start_date_req, "%Y-%m-%d")
@@ -611,7 +621,7 @@ def index():
 
 @app.route('/plot.png')
 def plot_png():
-    today = datetime.today()
+    today = get_market_today()
     q_start_month = (today.month - 1) // 3 * 3 + 1
     q_start_date = datetime(today.year, q_start_month, 1)
     if today - q_start_date < timedelta(days=7):
@@ -621,7 +631,7 @@ def plot_png():
     else:
         default_start_dt = q_start_date
         
-    default_end_dt = datetime.today()
+    default_end_dt = today
     
     symbols_req = request.args.get("symbols", "SOXX, MAGS, VXUS, GLD")
     start_date_req = request.args.get("start_date", default_start_dt.strftime("%Y-%m-%d"))
