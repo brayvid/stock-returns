@@ -1,4 +1,4 @@
-# Compare Stock Returns
+# Compare Stock Performance
 
 A high-performance Flask web application to compare the historical total returns of publicly traded securities, simulated savings rates, and custom portfolios against a benchmark.
 
